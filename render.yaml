@@ -1,0 +1,80 @@
+# Consolidated Render blueprint for the CA ADU Zoning API background workers.
+#
+# One-time setup (dashboard-gated because Render must install its GitHub App on
+# the repo): Render Dashboard -> New -> Blueprint -> connect github.com/kiromoussa/ca-adu-api
+# -> Render auto-detects this file and provisions the three cron workers below.
+# Then set the sync:false secrets (SUPABASE_*, LLM keys, SLACK/HCD) in the
+# dashboard once. Schedules are staggered: scrape 03:00 -> extract 04:30 -> QA 06:00 (UTC, Mon).
+
+services:
+  # 1. Scraper: pull raw ADU/zoning sections into zoning_sections.
+  - type: cron
+    name: ca-adu-scraper
+    runtime: python
+    plan: starter
+    schedule: "0 3 * * 1"
+    buildCommand: "pip install -r scraper/requirements.txt && python -m playwright install --with-deps chromium"
+    startCommand: "python -m scraper.main"
+    autoDeploy: false
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SCRAPER_HEADLESS
+        value: "true"
+      - key: SCRAPER_RATE_LIMIT_SECONDS
+        value: "2"
+      - key: SCRAPER_MAX_SECTIONS_PER_CITY
+        value: "25"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+
+  # 2. Extraction + state-law validation: zoning_sections -> adu_rules.
+  - type: cron
+    name: ca-adu-pipeline
+    runtime: python
+    plan: starter
+    schedule: "30 4 * * 1"
+    buildCommand: "pip install -r scraper/pipeline/requirements.txt"
+    startCommand: "python -m scraper.pipeline.run --all"
+    autoDeploy: false
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Provide exactly one LLM provider.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+
+  # 3. HCD compliance QA cross-check -> qa_alerts + Slack/email.
+  - type: cron
+    name: ca-adu-qa-crosscheck
+    runtime: python
+    plan: starter
+    schedule: "0 6 * * 1"
+    buildCommand: "pip install -r scraper/qa/requirements.txt"
+    startCommand: "python -m scraper.qa.run"
+    autoDeploy: false
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: HCD_APR_CSV_URL
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.12.7"
