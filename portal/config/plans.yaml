@@ -1,0 +1,176 @@
+# ADU Atlas API - plan and quota configuration (config-driven, not hardcoded).
+#
+# This file is the single source of truth for RapidAPI plan tiers, monthly
+# quotas, and metering behavior. The FastAPI limiter and the RapidAPI listing
+# package both read this file. Do not hardcode plan limits anywhere in code.
+#
+# Currency is USD. Prices are recurring monthly. There are NO paid overages in
+# v1: once a plan reaches its monthly quota the API returns 429 (quota_exceeded)
+# and the caller must upgrade or wait for the next billing cycle.
+
+version: 1
+currency: USD
+
+# ---------------------------------------------------------------------------
+# Billable unit definition
+# ---------------------------------------------------------------------------
+# A "unit" is exactly one completed address-level feasibility analysis, defined
+# as one address plus one project_type resolved to a terminal feasibility_status
+# and persisted as a property_analyses row.
+billing:
+  billable_unit:
+    name: completed_feasibility_analysis
+    description: >-
+      One completed address-level feasibility analysis: one normalized address
+      combined with one project_type that resolves to a terminal
+      feasibility_status (likely_feasible, likely_constrained,
+      needs_professional_review, or insufficient_data) and is persisted as a
+      property_analyses row.
+    billed_endpoints:
+      - "POST /v1/feasibility"
+    # Only successfully completed analyses are metered.
+    meter_on:
+      - completed_feasibility_analysis
+    # These outcomes are explicitly NOT billed.
+    do_not_meter:
+      - authentication_error        # 401 / invalid or missing key
+      - quota_exceeded              # 429
+      - validation_error            # 400 malformed request
+      - unsupported_coverage        # jurisdiction coverage_status != production
+      - insufficient_data_error     # request could not be resolved to a parcel
+      - rate_limited                # 429 short-window burst limiter
+      - server_error                # 5xx
+    # Read-only metadata endpoints never consume quota.
+    non_billable_endpoints:
+      - "GET /v1/jurisdictions"
+      - "GET /v1/jurisdictions/{slug}/rules"
+      - "GET /v1/analyses/{analysis_id}"
+      - "GET /v1/changelog"
+      - "GET /v1/health"
+
+  # Same-customer identical inputs within the dedupe window are served from
+  # cache and are NOT billed a second time. The request fingerprint is a hash of
+  # the normalized (consumer_id, address, project_type, options) tuple.
+  dedupe:
+    window_hours: 24
+    fingerprint_fields:
+      - consumer_id
+      - normalized_address
+      - project_type
+      - target_sqft
+      - bedrooms
+      - proposed_height_ft
+      - existing_structure
+      - options
+    cache_hit_billed: false
+    idempotency:
+      header: Idempotency-Key
+      # Idempotency keys are honored on POST /v1/feasibility. A repeated key with
+      # identical body returns the stored response; a repeated key with a
+      # different body returns 409 (idempotency_key_conflict) and is not billed.
+      window_hours: 24
+      conflict_status: 409
+
+  overages:
+    enabled: false
+    # When a plan reaches its monthly quota, requests return 429 quota_exceeded.
+    on_quota_exceeded:
+      http_status: 429
+      error_code: quota_exceeded
+
+# ---------------------------------------------------------------------------
+# Metering source of truth
+# ---------------------------------------------------------------------------
+# Prefer the RapidAPI gateway quota headers when present; otherwise fall back to
+# the internal limiter backed by api_usage_events.
+metering:
+  primary: rapidapi_gateway
+  fallback: internal_limiter
+  reset: calendar_month_utc            # quota window resets 1st of month 00:00 UTC
+  usage_table: api_usage_events
+  # Short-window burst limiter applied on top of monthly quota (all plans).
+  burst_limiter:
+    enabled: true
+    default_requests_per_minute: 60
+
+# ---------------------------------------------------------------------------
+# Plans
+# ---------------------------------------------------------------------------
+# monthly_quota is the number of billable units (completed analyses) per calendar
+# month. hard_cap: true means the quota is a strict ceiling with no overage path.
+plans:
+  BASIC:
+    display_name: Basic
+    price_usd: 0
+    billing_period: month
+    monthly_quota: 3
+    hard_cap: true
+    rate_limit_per_minute: 10
+    overages_allowed: false
+    rapidapi_plan_slug: basic
+    description: >-
+      Free tier for evaluation. 3 completed feasibility analyses per month,
+      hard capped. No overages.
+    features:
+      feasibility_analysis: true
+      jurisdiction_rules: true
+      changelog: true
+      shareable_analysis_token: false
+      priority_support: false
+
+  PRO:
+    display_name: Pro
+    price_usd: 25
+    billing_period: month
+    monthly_quota: 50
+    hard_cap: true
+    rate_limit_per_minute: 30
+    overages_allowed: false
+    rapidapi_plan_slug: pro
+    description: >-
+      50 completed feasibility analyses per month for individual developers and
+      small teams. No overages in v1.
+    features:
+      feasibility_analysis: true
+      jurisdiction_rules: true
+      changelog: true
+      shareable_analysis_token: true
+      priority_support: false
+
+  ULTRA:
+    display_name: Ultra
+    price_usd: 75
+    billing_period: month
+    monthly_quota: 250
+    hard_cap: true
+    rate_limit_per_minute: 60
+    overages_allowed: false
+    rapidapi_plan_slug: ultra
+    description: >-
+      250 completed feasibility analyses per month for growing PropTech and
+      lending workflows. No overages in v1.
+    features:
+      feasibility_analysis: true
+      jurisdiction_rules: true
+      changelog: true
+      shareable_analysis_token: true
+      priority_support: true
+
+  MEGA:
+    display_name: Mega
+    price_usd: 150
+    billing_period: month
+    monthly_quota: 750
+    hard_cap: true
+    rate_limit_per_minute: 120
+    overages_allowed: false
+    rapidapi_plan_slug: mega
+    description: >-
+      750 completed feasibility analyses per month for high-volume integrations.
+      No overages in v1; contact us for custom volume.
+    features:
+      feasibility_analysis: true
+      jurisdiction_rules: true
+      changelog: true
+      shareable_analysis_token: true
+      priority_support: true

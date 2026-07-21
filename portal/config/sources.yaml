@@ -1,0 +1,275 @@
+# ADU Atlas API - source registry seed data.
+#
+# Seeds the source_registry table. Every source that can back a substantive
+# result field is registered here with its publisher, endpoints, type, an
+# authority_rank, and license/terms notes. Provenance on every API result field
+# references a source_registry row by `key`.
+#
+# authority_rank convention (lower number = higher legal authority for a given
+# determination). Local adopted ordinances and official parcel/zoning GIS win
+# over statewide bootstrap layers; HCD is guidance/interpretive, not binding on
+# its own. Local rules more restrictive than the state baseline are flagged, not
+# discarded (see state_rule_baselines / compliance_flag).
+#
+#   1  state statute baseline (California Gov Code, AB/SB acts)   [state_law]
+#   2  local adopted municipal code / zoning ordinance            [municipal_code]
+#   2  official jurisdiction parcel + zoning GIS                  [gis_parcel/gis_zoning]
+#   3  official hazard/overlay GIS (FEMA, CAL FIRE, local overlay) [gis_overlay]
+#   4  state agency guidance (HCD handbook, review letters)       [state_guidance]
+#   5  statewide bootstrap zoning (used only until local ingested) [gis_zoning_bootstrap]
+#
+# source_type values:
+#   municipal_code | gis_parcel | gis_zoning | gis_overlay |
+#   gis_zoning_bootstrap | state_law | state_guidance
+#
+# publisher values: american_legal | municode | city_gis | fema | cal_fire |
+#   hcd | ca_open_data
+#
+# retrieval values: alp_render_api | municode_playwright | arcgis_rest |
+#   document | manual
+
+version: 1
+
+sources:
+  # -------------------------------------------------------------------------
+  # State-law baseline (authoritative floor/ceiling for every determination)
+  # -------------------------------------------------------------------------
+  - key: ca_state_adu_law
+    name: California ADU / JADU / SB 9 statute baseline
+    publisher: hcd
+    source_type: state_law
+    authority_rank: 1
+    base_url: https://leginfo.legislature.ca.gov/faces/codes_displayText.xhtml?lawCode=GOV&division=1.&title=7.&part=&chapter=13.&article=2.
+    rest_service_url: null
+    retrieval: document
+    citations:
+      - AB 68
+      - AB 881
+      - AB 2221
+      - SB 13
+      - SB 897
+      - SB 9
+      - "Gov. Code 66310-66342"
+      - "Gov. Code 65852.21 (SB 9 duplex)"
+      - "Gov. Code 66411.7 (SB 9 lot split)"
+    license_or_terms_notes: >-
+      California statute; public domain. Text via official California
+      Legislative Information (leginfo). Seeds state_rule_baselines.
+
+  # -------------------------------------------------------------------------
+  # State agency guidance (interpretive, not binding on its own)
+  # -------------------------------------------------------------------------
+  - key: hcd_adu_handbook
+    name: HCD Accessory Dwelling Unit Handbook
+    publisher: hcd
+    source_type: state_guidance
+    authority_rank: 4
+    base_url: https://www.hcd.ca.gov/building-standards/adu/handbook
+    rest_service_url: null
+    retrieval: document
+    license_or_terms_notes: >-
+      California Department of Housing and Community Development guidance
+      document. Interpretive only. Used for QA cross-checks and assumptions,
+      never as the sole authority for a determination.
+
+  - key: hcd_adu_landing
+    name: HCD Accessory Dwelling Unit program page
+    publisher: hcd
+    source_type: state_guidance
+    authority_rank: 4
+    base_url: https://www.hcd.ca.gov/building-standards/adu
+    rest_service_url: null
+    retrieval: document
+    license_or_terms_notes: >-
+      HCD ADU program landing page, including links to ordinance review letters.
+      Interpretive/guidance; supports QA and freshness monitoring.
+
+  # -------------------------------------------------------------------------
+  # Municipal code publishers (local adopted ordinances)
+  # -------------------------------------------------------------------------
+  - key: lamc_amlegal
+    name: Los Angeles Municipal Code (LAMC) - American Legal
+    publisher: american_legal
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: los_angeles
+    base_url: https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835
+    rest_service_url: https://codelibrary.amlegal.com/api/render-doc/los_angeles/latest/lamc/
+    retrieval: alp_render_api
+    license_or_terms_notes: >-
+      American Legal Publishing hosts the official LAMC. Retrieve via the
+      render-doc API using curl_cffi (impersonate chrome) to bypass Cloudflare.
+      Republication is display of public law; preserve immutable snapshots.
+
+  - key: sandiego_amlegal
+    name: San Diego Municipal Code - American Legal
+    publisher: american_legal
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: san_diego
+    base_url: https://docs.sandiego.gov/municode/MuniCodeChapter14/Ch14Art03Division01.pdf
+    rest_service_url: https://library.amlegal.com/api/render-doc/san_diego/latest/sandiego/
+    retrieval: alp_render_api
+    license_or_terms_notes: >-
+      San Diego code via American Legal plus official docs.sandiego.gov PDFs.
+      Public law. Coverage planned; not yet ingested.
+
+  - key: sanjose_municode
+    name: San Jose Municipal Code Title 20 (Zoning) - Municode
+    publisher: municode
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: san_jose
+    base_url: https://library.municode.com/ca/san_jose/codes/code_of_ordinances?nodeId=TIT20ZO
+    rest_service_url: null
+    retrieval: municode_playwright
+    license_or_terms_notes: >-
+      Municode-hosted San Jose Title 20 Zoning. Render with Playwright (client
+      side rendered). Public law. Coverage planned; not yet ingested.
+
+  - key: sf_amlegal
+    name: San Francisco Planning Code - American Legal
+    publisher: american_legal
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: san_francisco
+    base_url: https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/
+    rest_service_url: https://codelibrary.amlegal.com/api/render-doc/san_francisco/latest/sf_planning/
+    retrieval: alp_render_api
+    license_or_terms_notes: >-
+      San Francisco Planning Code via American Legal render-doc API. Public law.
+      Coverage planned; not yet ingested.
+
+  - key: sacramento_amlegal
+    name: Sacramento City Code Title 17 (Planning and Development) - American Legal
+    publisher: american_legal
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: sacramento
+    base_url: https://codelibrary.amlegal.com/codes/sacramento/latest/sacramento_ca/
+    rest_service_url: https://codelibrary.amlegal.com/api/render-doc/sacramento/latest/sacramento_ca/
+    retrieval: alp_render_api
+    license_or_terms_notes: >-
+      Sacramento Title 17 via American Legal render-doc API. Public law.
+      Coverage planned; not yet ingested.
+
+  - key: irvine_municode
+    name: Irvine Municipal Code Title 5 (Zoning) - Municode
+    publisher: municode
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: irvine
+    base_url: https://library.municode.com/ca/irvine/codes/code_of_ordinances
+    rest_service_url: null
+    retrieval: municode_playwright
+    license_or_terms_notes: >-
+      Municode-hosted Irvine Title 5 Zoning. Render with Playwright. Public law.
+      Coverage planned; not yet ingested.
+
+  - key: longbeach_municode
+    name: Long Beach Municipal Code Title 21 (Zoning) - Municode
+    publisher: municode
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: long_beach
+    base_url: https://library.municode.com/ca/long_beach/codes/municipal_code?nodeId=TIT21ZOREGU
+    rest_service_url: null
+    retrieval: municode_playwright
+    license_or_terms_notes: >-
+      Municode-hosted Long Beach Title 21 Zoning. Render with Playwright. Public
+      law. Coverage planned; not yet ingested.
+
+  - key: oakland_municode
+    name: Oakland Planning Code - Municode
+    publisher: municode
+    source_type: municipal_code
+    authority_rank: 2
+    jurisdiction_slug: oakland
+    base_url: https://library.municode.com/ca/oakland/codes/planning_code
+    rest_service_url: null
+    retrieval: municode_playwright
+    license_or_terms_notes: >-
+      Municode-hosted Oakland Planning Code. Render with Playwright. Public law.
+      Coverage planned; not yet ingested.
+
+  # -------------------------------------------------------------------------
+  # Official jurisdiction GIS - parcels + zoning (LA City v1)
+  # -------------------------------------------------------------------------
+  - key: la_zimas_parcels
+    name: LA City ZIMAS parcels (ArcGIS REST)
+    publisher: city_gis
+    source_type: gis_parcel
+    authority_rank: 2
+    jurisdiction_slug: los_angeles
+    base_url: https://zimas.lacity.org/
+    rest_service_url: https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer
+    retrieval: arcgis_rest
+    license_or_terms_notes: >-
+      LA City Zone Information and Map Access System (ZIMAS). Official LA City
+      parcel and zoning service. Do NOT substitute unincorporated LA County
+      zoning for LA City. Query with ?f=pjson metadata, /query f=geojson,
+      persist ETag/Last-Modified and layer metadata.
+
+  - key: la_zimas_zoning
+    name: LA City ZIMAS zoning districts (ArcGIS REST)
+    publisher: city_gis
+    source_type: gis_zoning
+    authority_rank: 2
+    jurisdiction_slug: los_angeles
+    base_url: https://zimas.lacity.org/
+    rest_service_url: https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer
+    retrieval: arcgis_rest
+    license_or_terms_notes: >-
+      LA City zoning districts from ZIMAS MapServer. Spatial join parcel/centroid
+      to zoning district; capture cross-zone ambiguity. Official LA City source.
+
+  # -------------------------------------------------------------------------
+  # Hazard / overlay GIS (statewide and federal)
+  # -------------------------------------------------------------------------
+  - key: fema_nfhl
+    name: FEMA National Flood Hazard Layer (NFHL)
+    publisher: fema
+    source_type: gis_overlay
+    overlay_type: flood
+    authority_rank: 3
+    base_url: https://www.fema.gov/flood-maps/national-flood-hazard-layer
+    rest_service_url: https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer
+    retrieval: arcgis_rest
+    overlay_layer_hint:
+      flood_hazard_zones_layer_id: 28
+    license_or_terms_notes: >-
+      FEMA NFHL public ArcGIS REST service, updated monthly. US Government work,
+      public domain. Flood Hazard Zones are layer id 28. Preserve raw zone
+      values (SFHA, ZONE) and distinguish "no hit" from "source unavailable".
+
+  - key: calfire_fhsz
+    name: CAL FIRE / OSFM Fire Hazard Severity Zones (FHSZ)
+    publisher: cal_fire
+    source_type: gis_overlay
+    overlay_type: fire
+    authority_rank: 3
+    base_url: https://data.ca.gov/dataset/fire-hazard-severity-zone-viewer1
+    rest_service_url: https://services.gis.ca.gov/arcgis/rest/services/Environment/Fire_Severity_Zones/MapServer
+    retrieval: arcgis_rest
+    license_or_terms_notes: >-
+      CAL FIRE / Office of the State Fire Marshal Fire Hazard Severity Zones,
+      hosted on the California state GIS service. Preserve raw hazard class
+      (Moderate/High/Very High) and SRA/LRA responsibility area. California open
+      data.
+
+  # -------------------------------------------------------------------------
+  # Statewide zoning bootstrap (used only until local zoning is ingested)
+  # -------------------------------------------------------------------------
+  - key: ca_statewide_zoning
+    name: California statewide zoning (bootstrap only)
+    publisher: ca_open_data
+    source_type: gis_zoning_bootstrap
+    authority_rank: 5
+    base_url: https://lab.data.ca.gov/dataset/california-statewide-zoning-north
+    rest_service_url: null
+    retrieval: arcgis_rest
+    license_or_terms_notes: >-
+      California statewide zoning dataset (data.ca.gov lab). Bootstrap only:
+      local jurisdiction zoning always wins where ingested. Never used as the
+      authoritative zoning source for a production jurisdiction. California open
+      data.
