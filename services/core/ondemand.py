@@ -19,7 +19,11 @@ the request path, but they must be fast and degrade gracefully:
   content key (``ondemand_key``) via ``NOT EXISTS`` so repeat requests do not
   bloat the tables;
 - everything is gated behind ``ONDEMAND_ENABLED`` (default true) so tests can
-  disable it, and behind the Los Angeles v1 scope (the proven ArcGIS layers).
+  disable it, and scoped to jurisdictions that have on-demand layers configured
+  (see :data:`JURISDICTION_LAYERS`); an unconfigured jurisdiction is skipped, not
+  blindly queried against another city's services. Los Angeles ships configured;
+  adding a city is a config entry (its parcel + zoning (+ overlay) ArcGIS query
+  URLs and field names), not a code change.
 
 No table names or columns are changed. httpx is imported lazily so the pure core
 imports without the dependency present.
@@ -54,6 +58,23 @@ class LayerConfig:
     # ONDEMAND_TIMEOUT_S when None. ZIMAS is materially slower than the other
     # services (~9s vs <1s), so it gets a longer allowance.
     timeout_s: Optional[float] = None
+    # Per-layer source-attribute field mappings. These are the ArcGIS attribute
+    # names (checked case-insensitively, first-present wins) used to extract the
+    # value we cache. Defaults match the proven LA v1 services, so a jurisdiction
+    # whose services use the same field names needs no override. A new city that
+    # names its fields differently just sets these tuples in its config.
+    apn_fields: tuple[str, ...] = ("APN", "AIN", "ain")
+    situs_fields: tuple[str, ...] = (
+        "SitusFullAddress", "SitusAddress", "situs_address",
+    )
+    zone_code_fields: tuple[str, ...] = (
+        "ZONE_CLASS", "ZONE_CMPLT", "zone_cmplt", "zone",
+    )
+    zone_name_fields: tuple[str, ...] = ("ZONE_CMPLT", "ZONE_CLASS")
+    # Overlay layers only: the overlay_features.overlay_type CHECK value this
+    # layer feeds and the attribute field(s) holding the hazard designation.
+    overlay_type: Optional[str] = None
+    designation_fields: tuple[str, ...] = ()
 
     @property
     def source_url(self) -> str:
@@ -87,10 +108,167 @@ FLOOD_LAYER = LayerConfig(
     provider="fema",
     source_type="gis_overlay",
     layer_name="NFHL/28",
+    overlay_type="flood",
+    designation_fields=("FLD_ZONE",),
 )
 
-# The Los Angeles v1 jurisdiction slug this resolver is scoped to.
+# The Los Angeles v1 jurisdiction slug (the first proven-production city).
 _LA_SLUG = "los_angeles"
+
+
+# ---------------------------------------------------------------------------
+# Per-jurisdiction layer registry
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class JurisdictionLayers:
+    """The on-demand ArcGIS layers for one jurisdiction, keyed by slug.
+
+    Adding a new production city is data, not code: append a
+    :class:`JurisdictionLayers` entry to :data:`JURISDICTION_LAYERS` (or a
+    ``jurisdiction_layers`` block in ``config/sources.yaml``) with the city's
+    parcel + zoning (+ overlay) ArcGIS ``/query`` URLs and, where the services
+    name their attributes differently from LA, the field-name overrides on each
+    :class:`LayerConfig`. The resolver logic below is fully jurisdiction-agnostic.
+
+    ``overlays`` is a tuple because a jurisdiction can layer several hazard
+    services (flood, fire, ...). Federal/statewide overlays (e.g. FEMA NFHL) are
+    shared verbatim across cities.
+    """
+
+    slug: str
+    parcel: Optional[LayerConfig] = None
+    zoning: Optional[LayerConfig] = None
+    overlays: tuple[LayerConfig, ...] = ()
+
+
+# Los Angeles v1: the proven, live-verified services. FEMA flood is federal and
+# reused by every jurisdiction until a city-specific overlay is added.
+_LA_LAYERS = JurisdictionLayers(
+    slug=_LA_SLUG,
+    parcel=PARCEL_LAYER,
+    zoning=ZONING_LAYER,
+    overlays=(FLOOD_LAYER,),
+)
+
+# San Diego v2: City of San Diego services, live-verified (see
+# docs/data-sources/san_diego.md). Situs is split across fields on the SD parcel
+# layer, so the street field is used for the cached situs_address.
+_SD_LAYERS = JurisdictionLayers(
+    slug="san_diego",
+    parcel=LayerConfig(
+        name="San Diego City parcels (GeocoderMerged/1)",
+        query_url="https://webmaps.sandiego.gov/arcgis/rest/services/GeocoderMerged/MapServer/1/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="GeocoderMerged/1",
+        apn_fields=("APN", "APN_8"),
+        situs_fields=("SITUS_STREET", "SITUS_ADDRESS"),
+    ),
+    zoning=LayerConfig(
+        name="San Diego DSD Official Zoning (Zoning_Base/0)",
+        query_url="https://webmaps.sandiego.gov/arcgis/rest/services/DSD/Zoning_Base/MapServer/0/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="DSD/Zoning_Base/0",
+        zone_code_fields=("ZONE_NAME",), zone_name_fields=("ZONE_NAME",),
+    ),
+    overlays=(FLOOD_LAYER,),  # FEMA flood is federal, shared across cities.
+)
+
+# The authoritative in-code registry. Only cities whose sources have been
+# ingested and verified belong here (coverage honesty non-negotiable).
+JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
+    _LA_SLUG: _LA_LAYERS,
+    "san_diego": _SD_LAYERS,
+}
+
+
+def _layer_from_yaml(raw: dict[str, Any]) -> Optional[LayerConfig]:
+    """Build a :class:`LayerConfig` from a config/sources.yaml layer mapping."""
+    if not isinstance(raw, dict):
+        return None
+    query_url = raw.get("query_url") or raw.get("rest_query_url")
+    if not query_url:
+        return None
+
+    def _tuple(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        v = raw.get(key)
+        if v is None:
+            return default
+        if isinstance(v, str):
+            return (v,)
+        return tuple(str(x) for x in v)
+
+    defaults = LayerConfig(name="", query_url="x", provider="arcgis",
+                           source_type="gis_parcel", layer_name="")
+    return LayerConfig(
+        name=str(raw.get("name") or query_url),
+        query_url=str(query_url),
+        provider=str(raw.get("provider") or "arcgis"),
+        source_type=str(raw.get("source_type") or "gis_parcel"),
+        layer_name=str(raw.get("layer_name") or ""),
+        verify_ssl=bool(raw.get("verify_ssl", True)),
+        timeout_s=raw.get("timeout_s"),
+        apn_fields=_tuple("apn_fields", defaults.apn_fields),
+        situs_fields=_tuple("situs_fields", defaults.situs_fields),
+        zone_code_fields=_tuple("zone_code_fields", defaults.zone_code_fields),
+        zone_name_fields=_tuple("zone_name_fields", defaults.zone_name_fields),
+        overlay_type=raw.get("overlay_type"),
+        designation_fields=_tuple("designation_fields", ()),
+    )
+
+
+def _load_yaml_jurisdiction_layers() -> dict[str, JurisdictionLayers]:
+    """Optionally merge a ``jurisdiction_layers`` block from config/sources.yaml.
+
+    This is a pure additive/override seam so a city can be onboarded by editing
+    config alone. It is defensive: any missing file, absent block, or malformed
+    entry is ignored and the in-code registry stands. It never raises.
+    """
+    path = os.environ.get("ADU_SOURCES_YAML")
+    if not path:
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.normpath(
+            os.path.join(here, "..", "..", "config", "sources.yaml")
+        )
+    try:
+        import yaml  # lazy: pure core imports without pyyaml present
+
+        with open(path, "r", encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh) or {}
+    except Exception:
+        return {}
+    block = doc.get("jurisdiction_layers") if isinstance(doc, dict) else None
+    if not isinstance(block, dict):
+        return {}
+    out: dict[str, JurisdictionLayers] = {}
+    for slug, cfg in block.items():
+        if not isinstance(cfg, dict):
+            continue
+        try:
+            parcel = _layer_from_yaml(cfg.get("parcel")) if cfg.get("parcel") else None
+            zoning = _layer_from_yaml(cfg.get("zoning")) if cfg.get("zoning") else None
+            overlays_raw = cfg.get("overlays") or []
+            overlays = tuple(
+                lc for lc in (_layer_from_yaml(o) for o in overlays_raw) if lc is not None
+            )
+            out[str(slug)] = JurisdictionLayers(
+                slug=str(slug), parcel=parcel, zoning=zoning, overlays=overlays,
+            )
+        except Exception:
+            continue
+    return out
+
+
+# Merge any yaml-declared jurisdictions over the in-code registry once at import.
+# yaml entries win so a city can be tuned/onboarded without a code change.
+try:
+    JURISDICTION_LAYERS.update(_load_yaml_jurisdiction_layers())
+except Exception:  # pragma: no cover - defensive
+    pass
+
+
+def get_jurisdiction_layers(slug: Optional[str]) -> Optional[JurisdictionLayers]:
+    """Return the configured layers for ``slug`` or ``None`` if unconfigured."""
+    if not slug:
+        return None
+    return JURISDICTION_LAYERS.get(slug)
 
 
 def _now() -> datetime:
@@ -280,13 +458,18 @@ class OnDemandResolver:
         self._slug_cache[jurisdiction_id] = slug
         return slug
 
+    def _layers_for(self, jurisdiction_id: Optional[str]) -> Optional[JurisdictionLayers]:
+        """Resolve the configured on-demand layers for a jurisdiction (by slug)."""
+        slug = self._jurisdiction_slug(jurisdiction_id)
+        return get_jurisdiction_layers(slug)
+
     def _in_scope(self, jurisdiction_id: Optional[str]) -> bool:
+        # In scope for any jurisdiction that has on-demand layers configured. An
+        # unknown / unconfigured jurisdiction is skipped rather than blindly
+        # queried against another city's services.
         if not self.enabled:
             return False
-        slug = self._jurisdiction_slug(jurisdiction_id)
-        # Proceed for LA (v1 scope) or when the slug is unknown (best effort);
-        # skip for any other known jurisdiction to avoid pointless fetches.
-        return slug is None or slug == _LA_SLUG
+        return self._layers_for(jurisdiction_id) is not None
 
     # -- fetch --------------------------------------------------------------
     def _fetch(self, layer: LayerConfig, point: GeoPoint) -> FetchResult:
@@ -400,20 +583,22 @@ class OnDemandResolver:
             return None
 
     # -- caching ------------------------------------------------------------
-    def _cache_parcels(self, jurisdiction_id: str, fetch: FetchResult) -> int:
+    def _cache_parcels(
+        self, jurisdiction_id: str, layer: LayerConfig, fetch: FetchResult
+    ) -> int:
         if not fetch.ok or not fetch.features:
             return 0
-        registry_id = self._ensure_registry(PARCEL_LAYER, jurisdiction_id)
+        registry_id = self._ensure_registry(layer, jurisdiction_id)
         snapshot_id = self._ensure_snapshot(registry_id, fetch)
         retrieved = self._now()
         inserted = 0
         for feat in fetch.features:
             geom = feat.get("geometry")
             props = feat.get("properties") or {}
-            apn = _prop(props, "APN", "AIN", "ain")
+            apn = _prop(props, *layer.apn_fields)
             if geom is None or apn is None:
                 continue
-            situs = _prop(props, "SitusFullAddress", "SitusAddress", "situs_address")
+            situs = _prop(props, *layer.situs_fields)
             raw = dict(props)
             raw["ondemand_key"] = feature_key(feat, apn)
             try:
@@ -443,8 +628,8 @@ class OnDemandResolver:
                         "situs": str(situs) if situs is not None else None,
                         "reg": registry_id,
                         "snap": snapshot_id,
-                        "url": PARCEL_LAYER.source_url,
-                        "layer": PARCEL_LAYER.layer_name,
+                        "url": layer.source_url,
+                        "layer": layer.layer_name,
                         "raw": json.dumps(raw, default=str),
                         "retrieved": retrieved,
                     },
@@ -454,20 +639,22 @@ class OnDemandResolver:
                 continue
         return inserted
 
-    def _cache_zoning(self, jurisdiction_id: str, fetch: FetchResult) -> int:
+    def _cache_zoning(
+        self, jurisdiction_id: str, layer: LayerConfig, fetch: FetchResult
+    ) -> int:
         if not fetch.ok or not fetch.features:
             return 0
-        registry_id = self._ensure_registry(ZONING_LAYER, jurisdiction_id)
+        registry_id = self._ensure_registry(layer, jurisdiction_id)
         snapshot_id = self._ensure_snapshot(registry_id, fetch)
         retrieved = self._now()
         inserted = 0
         for feat in fetch.features:
             geom = feat.get("geometry")
             props = feat.get("properties") or {}
-            zone_code = _prop(props, "ZONE_CLASS", "ZONE_CMPLT", "zone_cmplt", "zone")
+            zone_code = _prop(props, *layer.zone_code_fields)
             if geom is None or zone_code is None:
                 continue
-            zone_full = _prop(props, "ZONE_CMPLT", "ZONE_CLASS")
+            zone_full = _prop(props, *layer.zone_name_fields)
             key = feature_key(feat, zone_code)
             raw = dict(props)
             raw["ondemand_key"] = key
@@ -500,8 +687,8 @@ class OnDemandResolver:
                         "zcat": None,
                         "reg": registry_id,
                         "snap": snapshot_id,
-                        "url": ZONING_LAYER.source_url,
-                        "layer": ZONING_LAYER.layer_name,
+                        "url": layer.source_url,
+                        "layer": layer.layer_name,
                         "raw": json.dumps(raw, default=str),
                         "retrieved": retrieved,
                         "key": key,
@@ -515,12 +702,11 @@ class OnDemandResolver:
     def _cache_overlays(
         self,
         jurisdiction_id: Optional[str],
-        fetch: FetchResult,
-        *,
         layer: LayerConfig,
-        overlay_type: str,
-        designation_fields: tuple[str, ...],
+        fetch: FetchResult,
     ) -> int:
+        overlay_type = layer.overlay_type or "other"
+        designation_fields = layer.designation_fields
         if not fetch.ok or not fetch.features:
             return 0
         registry_id = self._ensure_registry(layer, jurisdiction_id)
@@ -585,31 +771,40 @@ class OnDemandResolver:
 
     # -- public entry points ------------------------------------------------
     def hydrate_point(self, jurisdiction_id: str, point: GeoPoint) -> dict[str, Any]:
-        """Fetch parcel + zoning + flood overlay in PARALLEL and cache them.
+        """Fetch parcel + zoning + overlay layer(s) in PARALLEL and cache them.
 
-        Called when a point has no cached parcel. A missing/slow source degrades
-        silently (its layer is simply left uncached) rather than blocking the
-        others or fabricating data.
+        Called when a point has no cached parcel. The layers fetched are whatever
+        the point's jurisdiction has configured (LA today). A missing/slow source
+        degrades silently (its layer is simply left uncached) rather than blocking
+        the others or fabricating data.
+
+        The result dict always carries ``parcel``, ``zoning`` and ``flood`` counts
+        (``flood`` stays 0 when the jurisdiction has no flood overlay) plus a count
+        per additional overlay_type and a ``fetched`` flag.
         """
-        result = {"parcel": 0, "zoning": 0, "flood": 0, "fetched": False}
-        if not self._in_scope(jurisdiction_id):
-            return result
-        # If every layer was refreshed for this point very recently, skip.
-        if (
-            self._recently_done("parcel", point)
-            and self._recently_done("zoning", point)
-            and self._recently_done("flood", point)
-        ):
+        result: dict[str, Any] = {"parcel": 0, "zoning": 0, "flood": 0, "fetched": False}
+        layers = self._layers_for(jurisdiction_id)
+        if not self.enabled or layers is None:
             return result
 
-        jobs = {
-            "parcel": PARCEL_LAYER,
-            "zoning": ZONING_LAYER,
-            "flood": FLOOD_LAYER,
-        }
+        # Build the fetch jobs for exactly the layers this jurisdiction configures.
+        jobs: dict[str, LayerConfig] = {}
+        if layers.parcel is not None:
+            jobs["parcel"] = layers.parcel
+        if layers.zoning is not None:
+            jobs["zoning"] = layers.zoning
+        for i, ov in enumerate(layers.overlays):
+            jobs[f"overlay:{i}"] = ov
+        if not jobs:
+            return result
+
+        # If every configured layer was refreshed for this point recently, skip.
+        if all(self._recently_done(layer.name, point) for layer in jobs.values()):
+            return result
+
         fetched: dict[str, FetchResult] = {}
         try:
-            with ThreadPoolExecutor(max_workers=3) as ex:
+            with ThreadPoolExecutor(max_workers=max(1, len(jobs))) as ex:
                 futs = {name: ex.submit(self._fetch, layer, point) for name, layer in jobs.items()}
                 for name, fut in futs.items():
                     try:
@@ -621,34 +816,47 @@ class OnDemandResolver:
             return result
 
         result["fetched"] = True
-        result["parcel"] = self._cache_parcels(jurisdiction_id, fetched["parcel"])
-        self._mark_done("parcel", point)
-        result["zoning"] = self._cache_zoning(jurisdiction_id, fetched["zoning"])
-        self._mark_done("zoning", point)
-        result["flood"] = self._cache_overlays(
-            None, fetched["flood"], layer=FLOOD_LAYER,
-            overlay_type="flood", designation_fields=("FLD_ZONE",),
-        )
-        self._mark_done("flood", point)
+        if "parcel" in jobs:
+            result["parcel"] = self._cache_parcels(
+                jurisdiction_id, jobs["parcel"], fetched["parcel"]
+            )
+            self._mark_done(jobs["parcel"].name, point)
+        if "zoning" in jobs:
+            result["zoning"] = self._cache_zoning(
+                jurisdiction_id, jobs["zoning"], fetched["zoning"]
+            )
+            self._mark_done(jobs["zoning"].name, point)
+        for i, ov in enumerate(layers.overlays):
+            name = f"overlay:{i}"
+            key = ov.overlay_type or "other"
+            # Federal / statewide overlays (e.g. FEMA NFHL) are not tied to a city.
+            cached = self._cache_overlays(None, ov, fetched[name])
+            result[key] = result.get(key, 0) + cached
+            self._mark_done(ov.name, point)
         return result
 
     def hydrate_zoning(self, jurisdiction_id: str, point: GeoPoint) -> int:
         """Fetch + cache only the zoning layer (partial-coverage safety net)."""
-        if not self._in_scope(jurisdiction_id) or self._recently_done("zoning", point):
+        layers = self._layers_for(jurisdiction_id)
+        if not self.enabled or layers is None or layers.zoning is None:
             return 0
-        fetch = self._fetch(ZONING_LAYER, point)
-        n = self._cache_zoning(jurisdiction_id, fetch)
-        self._mark_done("zoning", point)
+        if self._recently_done(layers.zoning.name, point):
+            return 0
+        fetch = self._fetch(layers.zoning, point)
+        n = self._cache_zoning(jurisdiction_id, layers.zoning, fetch)
+        self._mark_done(layers.zoning.name, point)
         return n
 
     def hydrate_overlays(self, jurisdiction_id: Optional[str], point: GeoPoint) -> int:
-        """Fetch + cache only the flood overlay layer (partial-coverage safety net)."""
-        if not self._in_scope(jurisdiction_id) or self._recently_done("flood", point):
+        """Fetch + cache the jurisdiction's overlay layer(s) (partial-coverage net)."""
+        layers = self._layers_for(jurisdiction_id)
+        if not self.enabled or layers is None or not layers.overlays:
             return 0
-        fetch = self._fetch(FLOOD_LAYER, point)
-        n = self._cache_overlays(
-            None, fetch, layer=FLOOD_LAYER,
-            overlay_type="flood", designation_fields=("FLD_ZONE",),
-        )
-        self._mark_done("flood", point)
-        return n
+        total = 0
+        for ov in layers.overlays:
+            if self._recently_done(ov.name, point):
+                continue
+            fetch = self._fetch(ov, point)
+            total += self._cache_overlays(None, ov, fetch)
+            self._mark_done(ov.name, point)
+        return total

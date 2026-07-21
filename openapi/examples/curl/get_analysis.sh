@@ -7,10 +7,11 @@ set -euo pipefail
 
 ANALYSIS_ID="b8e6f9d2-4b7d-4b0e-9a45-1e6a9d5c9d2f"
 
-# Option A: RapidAPI gateway (private analysis, owned by this consumer)
-curl -sS "https://aduatlas.p.rapidapi.com/v1/analyses/${ANALYSIS_ID}" \
+# Option A: RapidAPI gateway (private analysis, owned by this consumer;
+# the Hub-registered path has no /v1 prefix)
+curl -sS "https://property-feasibility4.p.rapidapi.com/analyses/${ANALYSIS_ID}" \
   -H "X-RapidAPI-Key: ${RAPIDAPI_KEY}" \
-  -H "X-RapidAPI-Host: aduatlas.p.rapidapi.com" | python3 -m json.tool
+  -H "X-RapidAPI-Host: property-feasibility4.p.rapidapi.com" | python3 -m json.tool
 
 # Option B: Direct API (private analysis)
 curl -sS "https://api.aduatlas.example.com/v1/analyses/${ANALYSIS_ID}" \

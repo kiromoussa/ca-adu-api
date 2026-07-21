@@ -30,10 +30,13 @@ REQUEST_BODY='{
 # Option A: RapidAPI gateway (primary distribution)
 # -----------------------------------------------------------------------
 # RAPIDAPI_KEY is the "X-RapidAPI-Key" value shown on your RapidAPI app.
-curl -sS -X POST "https://aduatlas.p.rapidapi.com/v1/feasibility" \
+# Note: the RapidAPI-facing path is /feasibility (no /v1) - the version
+# prefix lives in the origin base URL configured on the Hub, not in the
+# path you call.
+curl -sS -X POST "https://property-feasibility4.p.rapidapi.com/feasibility" \
   -H "Content-Type: application/json" \
   -H "X-RapidAPI-Key: ${RAPIDAPI_KEY}" \
-  -H "X-RapidAPI-Host: aduatlas.p.rapidapi.com" \
+  -H "X-RapidAPI-Host: property-feasibility4.p.rapidapi.com" \
   -H "Idempotency-Key: $(uuidgen)" \
   -d "${REQUEST_BODY}" | python3 -m json.tool
 

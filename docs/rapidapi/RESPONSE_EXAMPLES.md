@@ -7,7 +7,7 @@ Python, and JavaScript lives in `openapi/examples/`.
 
 ---
 
-## POST /v1/feasibility
+## POST /feasibility
 
 Billable. One completed analysis (terminal `feasibility_status`) is one
 billable unit. Not billed on error, validation failure, or
@@ -18,7 +18,7 @@ unsupported-coverage.
 | Header | Required | Notes |
 |---|---|---|
 | `X-RapidAPI-Key` | Yes (RapidAPI) | Injected automatically by the gateway. |
-| `X-RapidAPI-Host` | Yes (RapidAPI) | `aduatlas.p.rapidapi.com` |
+| `X-RapidAPI-Host` | Yes (RapidAPI) | `property-feasibility4.p.rapidapi.com` |
 | `Content-Type` | Yes | `application/json` |
 | `Idempotency-Key` | No | Client-generated key to make retries safe. |
 
@@ -60,14 +60,9 @@ this doc:
     "coverage_status": "production"
   },
   "feasibility_status": "likely_feasible",
-  "score": {
-    "value": 82,
-    "explanation": "Parcel matched with high confidence in an R1 zone that permits detached ADUs by right..."
-  },
+  "score": null,
   "eligible_paths": [
-    { "path_type": "detached_adu", "status": "likely_eligible" },
-    { "path_type": "jadu", "status": "conditional" },
-    { "path_type": "sb9_urban_lot_split", "status": "needs_professional_review" }
+    { "path_type": "detached_adu", "status": "likely_eligible" }
   ],
   "development_constraints": {
     "max_height_ft": { "value": 16, "unit": "ft", "state_baseline": 16, "compliance_flag": "compliant" },
@@ -77,14 +72,16 @@ this doc:
     { "overlay_type": "flood", "status": "no_hit" },
     { "overlay_type": "fire", "status": "no_hit" }
   ],
-  "approximate_envelope": {
-    "available": true,
-    "label": "approximate conceptual envelope",
-    "buildable_area_sqft": { "value": 1450, "unit": "sqft" }
-  },
   "disclaimer": "This is preliminary informational zoning and GIS analysis, not legal, architectural, surveying, engineering, title, environmental, or permit advice. Verify all results with the applicable jurisdiction and qualified professionals before making decisions or spending money."
 }
 ```
+
+Notes on current behavior: `eligible_paths` today contains exactly one
+entry, for the `project_type` you requested (it does not simultaneously
+evaluate ADU, JADU, and SB 9 in a single call). `score` is reserved by the
+schema but not currently computed and is always `null`.
+`approximate_envelope` is present only when the request body sets
+`"options": {"include_envelope": true}`, and only for Los Angeles.
 
 **Example 422 response - unsupported coverage (not billed)**
 
@@ -114,7 +111,7 @@ this doc:
 
 ---
 
-## GET /v1/jurisdictions
+## GET /jurisdictions
 
 Not billed. No request body, no path parameters.
 
@@ -146,7 +143,7 @@ Not billed. No request body, no path parameters.
 
 ---
 
-## GET /v1/jurisdictions/{slug}/rules
+## GET /jurisdictions/{slug}/rules
 
 Not billed. Optional `?zone=` and `?project_type=` query filters.
 
@@ -190,14 +187,14 @@ Not billed. Optional `?zone=` and `?project_type=` query filters.
 
 ---
 
-## GET /v1/analyses/{analysis_id}
+## GET /analyses/{analysis_id}
 
 Not billed. Requires the same API key/consumer that created the analysis,
 or a valid `?token=` share token for a public shareable analysis.
 
 **Example 200 response**
 
-Same shape as `POST /v1/feasibility` - see `openapi/examples/feasibility.response.json`.
+Same shape as `POST /feasibility` - see `openapi/examples/feasibility.response.json`.
 
 **Example 403 response - private analysis owned by another consumer**
 
@@ -213,7 +210,7 @@ Same shape as `POST /v1/feasibility` - see `openapi/examples/feasibility.respons
 
 ---
 
-## GET /v1/changelog
+## GET /changelog
 
 Not billed. Optional `?jurisdiction=` and `?limit=` (default 50, max 200).
 
@@ -243,7 +240,7 @@ Not billed. Optional `?jurisdiction=` and `?limit=` (default 50, max 200).
 
 ---
 
-## GET /v1/health
+## GET /health
 
 Not billed. No authentication required.
 

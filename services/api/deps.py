@@ -15,7 +15,7 @@ from typing import Any, Optional
 from fastapi import Request
 
 from ..core.db import PostgresRepository
-from ..core.geocode import CensusGeocoder, Geocoder
+from ..core.geocode import Geocoder, build_default_geocoder
 from ..core.repository import FeasibilityRepository
 from . import errors, rapidapi
 from .rapidapi import Credentials, InMemoryRateLimiter
@@ -36,7 +36,9 @@ def get_repository() -> FeasibilityRepository:
 @lru_cache(maxsize=1)
 def get_geocoder() -> Geocoder:
     settings = get_settings()
-    return CensusGeocoder(timeout_s=settings.geocoder_timeout_s)
+    # Census keyless primary; Google / Mapbox appended only when their env keys
+    # are set. Never fabricates a point on low-confidence / no-match.
+    return build_default_geocoder(timeout_s=settings.geocoder_timeout_s)
 
 
 @lru_cache(maxsize=1)

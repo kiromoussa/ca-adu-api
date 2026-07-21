@@ -15,6 +15,7 @@ Two concerns, cleanly separated:
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -162,11 +163,22 @@ class CensusGeocoder:
             "benchmark": self._benchmark,
             "format": "json",
         }
-        try:
-            resp = httpx.get(self.ENDPOINT, params=params, timeout=self._timeout_s)
-            resp.raise_for_status()
-            payload = resp.json()
-        except Exception:
+        # Census is the keyless primary; a transient failure (network / timeout /
+        # 5xx) is retried ONCE before we degrade. A successful-but-empty response
+        # is a genuine no-match and is not retried.
+        payload = None
+        last_error = True
+        for attempt in range(2):
+            try:
+                resp = httpx.get(self.ENDPOINT, params=params, timeout=self._timeout_s)
+                resp.raise_for_status()
+                payload = resp.json()
+                last_error = False
+                break
+            except Exception:
+                last_error = True
+                continue
+        if last_error or payload is None:
             return GeocodeResult(
                 point=None,
                 confidence="low",
@@ -205,6 +217,200 @@ class CensusGeocoder:
             matched_address=best.get("matchedAddress"),
             source=self._source("current", confidence),
         )
+
+
+class GoogleGeocoder:
+    """Optional Google Maps Geocoding API fallback (used only when a key is set).
+
+    Never fabricates a point: an unresolved or low-precision result is returned
+    as ``low`` confidence so the orchestrator degrades to ``insufficient_data``.
+    location_type ROOFTOP / RANGE_INTERPOLATED is treated as reliable; the coarse
+    GEOMETRIC_CENTER / APPROXIMATE geometries (and any partial_match) are low.
+    """
+
+    ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json"
+    SOURCE_TITLE = "Google Maps Geocoding API"
+
+    def __init__(self, api_key: str, *, timeout_s: float = 8.0):
+        self._api_key = api_key
+        self._timeout_s = timeout_s
+
+    def _source(self, data_status: str, confidence: str) -> SourceRef:
+        return SourceRef(
+            source_url=self.ENDPOINT,
+            source_title=self.SOURCE_TITLE,
+            source_layer="geocode/json",
+            retrieved_at=_now(),
+            last_verified_at=_now(),
+            confidence=confidence,
+            data_status=data_status,
+        )
+
+    def geocode(self, address: str) -> GeocodeResult:
+        try:
+            import httpx
+        except Exception:  # pragma: no cover - dependency guard
+            return GeocodeResult(None, "low", None, self._source("unavailable", "low"))
+
+        params = {"address": address, "key": self._api_key}
+        try:
+            resp = httpx.get(self.ENDPOINT, params=params, timeout=self._timeout_s)
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception:
+            return GeocodeResult(None, "low", None, self._source("unavailable", "low"))
+
+        status = payload.get("status") if isinstance(payload, dict) else None
+        results = payload.get("results", []) if isinstance(payload, dict) else []
+        if status != "OK" or not results:
+            return GeocodeResult(None, "low", None, self._source("current", "low"))
+
+        best = results[0]
+        geom = best.get("geometry", {}) or {}
+        loc = geom.get("location", {}) or {}
+        lat = loc.get("lat")
+        lon = loc.get("lng")
+        if lat is None or lon is None:
+            return GeocodeResult(None, "low", None, self._source("current", "low"))
+
+        location_type = geom.get("location_type")
+        partial = bool(best.get("partial_match"))
+        if partial or location_type in ("GEOMETRIC_CENTER", "APPROXIMATE"):
+            confidence = "low"
+        elif location_type == "ROOFTOP":
+            confidence = "high" if len(results) == 1 else "medium"
+        elif location_type == "RANGE_INTERPOLATED":
+            confidence = "medium"
+        else:
+            confidence = "low"
+        return GeocodeResult(
+            point=GeoPoint(lon=float(lon), lat=float(lat)),
+            confidence=confidence,
+            matched_address=best.get("formatted_address"),
+            source=self._source("current", confidence),
+        )
+
+
+class MapboxGeocoder:
+    """Optional Mapbox Geocoding fallback (used only when an access token is set).
+
+    Maps Mapbox ``relevance`` (0..1) to confidence and never fabricates a point:
+    a weak or missing result is ``low`` confidence -> ``insufficient_data``.
+    """
+
+    ENDPOINT = "https://api.mapbox.com/geocoding/v5/mapbox.places"
+    SOURCE_TITLE = "Mapbox Geocoding API"
+
+    def __init__(self, access_token: str, *, timeout_s: float = 8.0):
+        self._token = access_token
+        self._timeout_s = timeout_s
+
+    def _source(self, data_status: str, confidence: str) -> SourceRef:
+        return SourceRef(
+            source_url=self.ENDPOINT,
+            source_title=self.SOURCE_TITLE,
+            source_layer="mapbox.places",
+            retrieved_at=_now(),
+            last_verified_at=_now(),
+            confidence=confidence,
+            data_status=data_status,
+        )
+
+    def geocode(self, address: str) -> GeocodeResult:
+        try:
+            import httpx
+        except Exception:  # pragma: no cover - dependency guard
+            return GeocodeResult(None, "low", None, self._source("unavailable", "low"))
+
+        from urllib.parse import quote
+
+        url = f"{self.ENDPOINT}/{quote(address)}.json"
+        params = {
+            "access_token": self._token,
+            "limit": "1",
+            "country": "us",
+            "types": "address",
+        }
+        try:
+            resp = httpx.get(url, params=params, timeout=self._timeout_s)
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception:
+            return GeocodeResult(None, "low", None, self._source("unavailable", "low"))
+
+        features = payload.get("features", []) if isinstance(payload, dict) else []
+        if not features:
+            return GeocodeResult(None, "low", None, self._source("current", "low"))
+
+        best = features[0]
+        center = best.get("center") or []
+        if len(center) < 2:
+            return GeocodeResult(None, "low", None, self._source("current", "low"))
+        lon, lat = center[0], center[1]
+        relevance = best.get("relevance")
+        try:
+            rel = float(relevance) if relevance is not None else 0.0
+        except (TypeError, ValueError):
+            rel = 0.0
+        if rel >= 0.9:
+            confidence = "high"
+        elif rel >= 0.6:
+            confidence = "medium"
+        else:
+            confidence = "low"
+        return GeocodeResult(
+            point=GeoPoint(lon=float(lon), lat=float(lat)),
+            confidence=confidence,
+            matched_address=best.get("place_name"),
+            source=self._source("current", confidence),
+        )
+
+
+class ChainedGeocoder:
+    """Try a primary geocoder, then fall back to others until one resolves.
+
+    A result is accepted (chain stops) only when ``resolved`` is True (a point at
+    high/medium confidence). If no provider resolves, the best-effort result from
+    the first provider that at least produced a source is returned so the
+    orchestrator degrades to ``insufficient_data`` - a point is never fabricated.
+    """
+
+    def __init__(self, primary: "Geocoder", *fallbacks: "Geocoder"):
+        self._providers = [primary, *fallbacks]
+
+    def geocode(self, address: str) -> GeocodeResult:
+        first: Optional[GeocodeResult] = None
+        for provider in self._providers:
+            result = provider.geocode(address)
+            if first is None:
+                first = result
+            if result.resolved:
+                return result
+        # Nothing resolved: return the primary's (low/unavailable) result so the
+        # caller degrades honestly rather than guessing.
+        assert first is not None  # at least the primary always runs
+        return first
+
+
+def build_default_geocoder(*, timeout_s: float = 8.0) -> "Geocoder":
+    """Build the request-path geocoder: Census primary + optional key fallbacks.
+
+    Census (keyless) is always primary. Google and/or Mapbox are appended as
+    fallbacks only when ``GOOGLE_MAPS_GEOCODING_API_KEY`` /
+    ``MAPBOX_ACCESS_TOKEN`` are set in the environment. With no keys this is
+    exactly the Census geocoder, so existing deployments are unchanged.
+    """
+    fallbacks: list[Geocoder] = []
+    google_key = os.environ.get("GOOGLE_MAPS_GEOCODING_API_KEY")
+    if google_key:
+        fallbacks.append(GoogleGeocoder(google_key, timeout_s=timeout_s))
+    mapbox_token = os.environ.get("MAPBOX_ACCESS_TOKEN")
+    if mapbox_token:
+        fallbacks.append(MapboxGeocoder(mapbox_token, timeout_s=timeout_s))
+    primary = CensusGeocoder(timeout_s=timeout_s)
+    if not fallbacks:
+        return primary
+    return ChainedGeocoder(primary, *fallbacks)
 
 
 class StaticGeocoder:

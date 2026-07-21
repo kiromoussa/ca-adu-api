@@ -21,9 +21,13 @@ import httpx
 
 AuthMode = Literal["rapidapi", "direct"]
 
-RAPIDAPI_BASE_URL = "https://aduatlas.p.rapidapi.com"
+# The RapidAPI Hub endpoint paths were registered WITHOUT the /v1 prefix (the
+# origin's /v1 base path lives in the provider's Base URL setting on the Hub,
+# invisible to consumers). property-feasibility4.p.rapidapi.com/feasibility
+# maps to https://adu-atlas-api.onrender.com/v1/feasibility on the origin.
+RAPIDAPI_BASE_URL = "https://property-feasibility4.p.rapidapi.com"
 DIRECT_BASE_URL = "https://api.aduatlas.example.com"
-DEFAULT_RAPIDAPI_HOST = "aduatlas.p.rapidapi.com"
+DEFAULT_RAPIDAPI_HOST = "property-feasibility4.p.rapidapi.com"
 
 
 @dataclass
@@ -69,6 +73,16 @@ class AduAtlasApiError(Exception):
         super().__init__(f"[{status_code} {self.code}] {self.message}")
 
 
+def _consumer_path(config: AduAtlasConfig, path: str) -> str:
+    """Every example in this directory writes paths with the /v1 prefix (the
+    origin's real path). RapidAPI's Hub-registered endpoint paths omit that
+    prefix, so this strips it automatically when mode='rapidapi'.
+    """
+    if config.mode == "rapidapi" and path.startswith("/v1/"):
+        return path[len("/v1"):]
+    return path
+
+
 def request(
     config: AduAtlasConfig,
     method: str,
@@ -86,7 +100,7 @@ def request(
     with httpx.Client(timeout=timeout) as client:
         response = client.request(
             method,
-            f"{config.url()}{path}",
+            f"{config.url()}{_consumer_path(config, path)}",
             headers=headers,
             json=json,
             params=params,

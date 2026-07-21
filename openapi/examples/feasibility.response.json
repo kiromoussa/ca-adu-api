@@ -116,10 +116,7 @@
     }
   },
   "feasibility_status": "likely_feasible",
-  "score": {
-    "value": 82,
-    "explanation": "Parcel matched with high confidence in an R1 zone that permits detached ADUs by right. Proposed 800 sqft / 16 ft height is within the state-law floor and no overlay hits were found. Score reduced from a maximum band because front-yard setback orientation could not be confirmed from GIS data alone."
-  },
+  "score": null,
   "eligible_paths": [
     {
       "path_type": "detached_adu",
@@ -136,42 +133,6 @@
           "confidence": "high",
           "data_status": "current",
           "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
-        }
-      ]
-    },
-    {
-      "path_type": "jadu",
-      "status": "conditional",
-      "reason": "A JADU is additionally allowed on this lot (one JADU plus one ADU permitted on a single-family lot under Gov Code 66333), conditional on owner-occupancy if sanitation is shared with the primary dwelling.",
-      "sources": [
-        {
-          "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
-          "source_title": "HCD ADU Handbook (state baseline)",
-          "source_section": "Chapter 4 - JADUs",
-          "source_layer": null,
-          "retrieved_at": "2026-06-01T00:00:00Z",
-          "last_verified_at": "2026-06-01T00:00:00Z",
-          "confidence": "high",
-          "data_status": "current",
-          "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
-        }
-      ]
-    },
-    {
-      "path_type": "sb9_urban_lot_split",
-      "status": "needs_professional_review",
-      "reason": "Lot size (5,227 sqft) is above the SB 9 minimum split threshold, but a proposed detached_adu request does not itself evaluate a lot split; a separate SB 9 application review is required to confirm the resulting parcel sizes meet the 40/60 ratio and 1,200 sqft minimum.",
-      "sources": [
-        {
-          "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
-          "source_title": "HCD ADU Handbook (state baseline)",
-          "source_section": "Chapter 6 - SB 9",
-          "source_layer": null,
-          "retrieved_at": "2026-06-01T00:00:00Z",
-          "last_verified_at": "2026-06-01T00:00:00Z",
-          "confidence": "medium",
-          "data_status": "current",
-          "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
         }
       ]
     }

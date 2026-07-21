@@ -3,7 +3,7 @@
 //
 // Run with: node health.js
 async function main() {
-  // No auth headers required for /v1/health, on either host.
+  // No auth headers required for /health, on either host.
   const res = await fetch("https://api.aduatlas.example.com/v1/health");
   const health = await res.json();
 
@@ -11,6 +11,10 @@ async function main() {
   for (const source of health.sources || []) {
     console.log(`  ${source.key}: ${source.data_status}`);
   }
+
+  // Also reachable through the RapidAPI gateway (the Hub-registered path
+  // has no /v1 prefix); still no auth headers required.
+  await fetch("https://property-feasibility4.p.rapidapi.com/health");
 }
 
 main();

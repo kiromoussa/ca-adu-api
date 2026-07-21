@@ -11,13 +11,17 @@ from __future__ import annotations
 import math
 
 from services.core.ondemand import (
+    JURISDICTION_LAYERS,
     FLOOD_LAYER,
     PARCEL_LAYER,
     ZONING_LAYER,
+    JurisdictionLayers,
+    LayerConfig,
     OnDemandResolver,
     arcgis_query_params,
     bbox_envelope,
     feature_key,
+    get_jurisdiction_layers,
 )
 from services.core.repository import GeoPoint
 
@@ -220,3 +224,93 @@ def test_empty_feature_set_is_a_clean_no_hit():
     out = r.hydrate_point("jid-1", LA_POINT)
     assert out["fetched"] is True
     assert out["parcel"] == 0 and out["zoning"] == 0 and out["flood"] == 0
+
+
+# ---- Multi-jurisdiction layer resolution ----------------------------------
+def test_la_layers_are_registered_and_unknown_city_is_unconfigured():
+    la = get_jurisdiction_layers("los_angeles")
+    assert la is not None
+    assert la.parcel is PARCEL_LAYER
+    assert la.zoning is ZONING_LAYER
+    assert FLOOD_LAYER in la.overlays
+    # An un-onboarded city has no configured layers (coverage honesty).
+    assert get_jurisdiction_layers("san_diego") is None
+    assert get_jurisdiction_layers(None) is None
+
+
+# A second, fictional jurisdiction with DIFFERENT services + attribute names,
+# proving a city is added by config alone (distinct URLs + field mappings), with
+# zero change to the resolver logic.
+TESTVILLE = JurisdictionLayers(
+    slug="testville",
+    parcel=LayerConfig(
+        name="Testville parcels",
+        query_url="https://gis.testville.example/parcels/MapServer/0/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="tv_parcels/0",
+        apn_fields=("PARCEL_NO",),           # different from LA's APN/AIN
+        situs_fields=("ADDR",),
+    ),
+    zoning=LayerConfig(
+        name="Testville zoning",
+        query_url="https://gis.testville.example/zoning/MapServer/3/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="tv_zoning/3",
+        zone_code_fields=("ZONING_CODE",),   # different from LA's ZONE_CLASS
+        zone_name_fields=("ZONING_DESC",),
+    ),
+    overlays=(FLOOD_LAYER,),                  # federal flood reused
+)
+
+
+def _register_testville():
+    JURISDICTION_LAYERS["testville"] = TESTVILLE
+
+
+def _unregister_testville():
+    JURISDICTION_LAYERS.pop("testville", None)
+
+
+def test_second_city_hydrates_from_its_own_layers_and_field_names():
+    _register_testville()
+    try:
+        db = FakeDB(slug="testville")
+        fetch = make_fetch({
+            "gis.testville.example/parcels": [{
+                "type": "Feature",
+                "geometry": {"type": "Polygon",
+                             "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]},
+                "properties": {"PARCEL_NO": "TV-001", "ADDR": "1 TEST WAY"},
+            }],
+            "gis.testville.example/zoning": [{
+                "type": "Feature",
+                "geometry": {"type": "Polygon",
+                             "coordinates": [[[0, 0], [0, 2], [2, 2], [2, 0], [0, 0]]]},
+                "properties": {"ZONING_CODE": "RS-1", "ZONING_DESC": "Single Family"},
+            }],
+            "NFHL": [_flood_feature("X")],
+        })
+        r = OnDemandResolver(db, enabled=True, fetch=fetch)
+        out = r.hydrate_point("jid-tv", GeoPoint(lon=-117.0, lat=33.0))
+
+        # Queried Testville's own services, NOT the LA ones.
+        assert any("gis.testville.example/parcels" in u for u in fetch.calls)
+        assert any("gis.testville.example/zoning" in u for u in fetch.calls)
+        assert not any("LACounty_Parcel" in u for u in fetch.calls)
+        assert not any("zimas" in u for u in fetch.calls)
+
+        # Rows cached => the per-city field-name overrides extracted values.
+        assert out["parcel"] == 1 and out["zoning"] == 1 and out["flood"] == 1
+        parcel_sql = next(s for s in db.executed if "insert into parcels" in s)
+        assert "on conflict (jurisdiction_id, apn) do nothing" in parcel_sql
+    finally:
+        _unregister_testville()
+
+
+def test_unconfigured_jurisdiction_fetches_nothing():
+    db = FakeDB(slug="nowhere_ca")  # not in the registry
+    fetch = make_fetch(_all_features())
+    r = OnDemandResolver(db, enabled=True, fetch=fetch)
+    out = r.hydrate_point("jid-x", LA_POINT)
+    assert out["fetched"] is False
+    assert fetch.calls == []
+    assert r.hydrate_zoning("jid-x", LA_POINT) == 0
+    assert r.hydrate_overlays("jid-x", LA_POINT) == 0

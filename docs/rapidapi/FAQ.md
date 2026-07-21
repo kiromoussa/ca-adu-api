@@ -30,14 +30,14 @@ Sacramento, Irvine, Long Beach, and Oakland are registered so you can build
 against them, but calls for those cities return `unsupported_coverage`
 (HTTP 422, not billed) until each city's source registry, GIS layers, and
 rule set are ingested, tested, and marked production-ready. Call
-`GET /v1/jurisdictions` at request time to check live coverage status -
+`GET /jurisdictions` at request time to check live coverage status -
 do not hardcode which cities are supported.
 
 ---
 
 **Does this API use an LLM to answer my request?**
 
-No. The request path (everything behind `POST /v1/feasibility` and the GET
+No. The request path (everything behind `POST /feasibility` and the GET
 endpoints) is fully deterministic: versioned structured rules, PostGIS
 spatial joins, and source-linked data only. Large language models are used
 only offline, to generate extraction candidates from municipal code text and
@@ -61,7 +61,7 @@ result and are not billed again. See the Pricing tab for full detail.
 **How do I avoid being double-charged if my client retries a request?**
 
 Send an `Idempotency-Key` header (any string, up to 255 characters) on your
-`POST /v1/feasibility` call. A repeated key with an identical request body
+`POST /feasibility` call. A repeated key with an identical request body
 returns the original stored result at no additional cost. A repeated key
 with a different request body returns `409 idempotency_key_conflict` and is
 not billed.
@@ -88,11 +88,13 @@ square footage?**
 
 It is an approximate buildable-area estimate computed by buffering the
 parcel polygon inward by the applicable setbacks in PostGIS, available for
-Los Angeles in v1 only. It is explicitly labeled `"approximate conceptual
-envelope"` and is not a survey. If the parcel's front/side/rear orientation
-cannot be determined from GIS data, the envelope is downgraded with a
-`limitations` entry rather than reporting false precision. It never asserts
-easements, slopes, utilities, trees, HOA covenants, or title facts.
+Los Angeles in v1 only. Set `"options": {"include_envelope": true}` in your
+request to receive it - it is not computed by default. It is explicitly
+labeled `"approximate conceptual envelope"` and is not a survey. If the
+parcel's front/side/rear orientation cannot be determined from GIS data,
+the envelope is downgraded with a `limitations` entry rather than reporting
+false precision. It never asserts easements, slopes, utilities, trees, HOA
+covenants, or title facts.
 
 ---
 
@@ -110,7 +112,7 @@ copy-paste requests in curl, TypeScript, Python, and JavaScript.
 **Can I share a result with someone who does not have an API key?**
 
 Yes, on Pro, Ultra, and Mega plans. A completed analysis can carry a
-`share_token`; anyone with `GET /v1/analyses/{analysis_id}?token=<token>`
+`share_token`; anyone with `GET /analyses/{analysis_id}?token=<token>`
 can retrieve the read-only result with no API credentials. This lookup is
 never billed.
 
@@ -118,11 +120,11 @@ never billed.
 
 **How fresh is the underlying zoning and GIS data?**
 
-Check `GET /v1/health` for non-sensitive freshness per source, and
-`GET /v1/jurisdictions/{slug}/rules` for the rule-set version history for a
+Check `GET /health` for non-sensitive freshness per source, and
+`GET /jurisdictions/{slug}/rules` for the rule-set version history for a
 specific jurisdiction. Each result also carries `freshness.data_as_of`, the
 newest `last_verified_at` timestamp across the sources actually used for
-that analysis. `GET /v1/changelog` is the public, per-city update history.
+that analysis. `GET /changelog` is the public, per-city update history.
 
 ---
 
@@ -130,6 +132,6 @@ that analysis. `GET /v1/changelog` is the public, per-city update history.
 
 Report it through support with the `analysis_id` (or the jurisdiction slug
 and zone) and the source you believe is authoritative. Verified corrections
-are published and appear in `GET /v1/changelog` with
+are published and appear in `GET /changelog` with
 `change_type: correction`. Raw source snapshots are immutable and versioned,
 so every past analysis result remains reproducible even after a correction.

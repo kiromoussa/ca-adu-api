@@ -5,5 +5,6 @@ set -euo pipefail
 
 curl -sS "https://api.aduatlas.example.com/v1/health" | python3 -m json.tool
 
-# Also reachable through the RapidAPI gateway with no auth headers required:
-curl -sS "https://aduatlas.p.rapidapi.com/v1/health" | python3 -m json.tool
+# Also reachable through the RapidAPI gateway (Hub-registered path has no
+# /v1 prefix); still no auth headers required:
+curl -sS "https://property-feasibility4.p.rapidapi.com/health" | python3 -m json.tool

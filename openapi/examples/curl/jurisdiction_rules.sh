@@ -9,10 +9,10 @@ SLUG="los_angeles"
 ZONE="R1"
 PROJECT_TYPE="detached_adu"
 
-# Option A: RapidAPI gateway
-curl -sS "https://aduatlas.p.rapidapi.com/v1/jurisdictions/${SLUG}/rules?zone=${ZONE}&project_type=${PROJECT_TYPE}" \
+# Option A: RapidAPI gateway (the Hub-registered path has no /v1 prefix)
+curl -sS "https://property-feasibility4.p.rapidapi.com/jurisdictions/${SLUG}/rules?zone=${ZONE}&project_type=${PROJECT_TYPE}" \
   -H "X-RapidAPI-Key: ${RAPIDAPI_KEY}" \
-  -H "X-RapidAPI-Host: aduatlas.p.rapidapi.com" | python3 -m json.tool
+  -H "X-RapidAPI-Host: property-feasibility4.p.rapidapi.com" | python3 -m json.tool
 
 # Option B: Direct API
 curl -sS "https://api.aduatlas.example.com/v1/jurisdictions/${SLUG}/rules?zone=${ZONE}&project_type=${PROJECT_TYPE}" \

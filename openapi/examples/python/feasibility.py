@@ -74,11 +74,11 @@ if __name__ == "__main__":
 #   import requests, uuid
 #
 #   resp = requests.post(
-#       "https://aduatlas.p.rapidapi.com/v1/feasibility",
+#       "https://property-feasibility4.p.rapidapi.com/feasibility",
 #       headers={
 #           "Content-Type": "application/json",
 #           "X-RapidAPI-Key": RAPIDAPI_KEY,
-#           "X-RapidAPI-Host": "aduatlas.p.rapidapi.com",
+#           "X-RapidAPI-Host": "property-feasibility4.p.rapidapi.com",
 #           "Idempotency-Key": str(uuid.uuid4()),
 #       },
 #       json=REQUEST_BODY,
