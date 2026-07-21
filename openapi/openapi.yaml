@@ -1,13 +1,18 @@
 openapi: 3.1.0
 info:
-  title: ADU Atlas API
+  title: Atlas Property Feasibility API
   version: "1.0.0"
   summary: >-
-    Deterministic, source-cited, address-level preliminary feasibility for
-    California ADUs, JADUs, and SB 9 projects.
+    The API for property feasibility. Deterministic, source-cited,
+    address-level results. Live now: California ADU, JADU, and SB 9. Expanding
+    to permits, environmental, historic, and coastal.
   description: >
-    ADU Atlas is a self-serve, developer-facing California parcel feasibility
-    API. Send an address and a proposed project type and receive a fast,
+    Atlas is a self-serve, developer-facing property feasibility API. Send an
+    address and a proposed project type and receive a fast, deterministic,
+    source-cited, timestamped PRELIMINARY feasibility result. Live coverage
+    today is California ADU, JADU, and SB 9 projects; permits, environmental,
+    historic, and coastal analysis are on the roadmap and are not yet returned.
+    Send an address and a proposed project type and receive a fast,
     deterministic, source-cited, timestamped PRELIMINARY feasibility result:
     parcel and zoning context, ADU / JADU / SB 9 rules, setback / height / size
     constraints, hazard and overlay flags, assumptions, confidence, and
@@ -44,10 +49,10 @@ info:
     professionals before making decisions or spending money.
 
 servers:
-  - url: https://aduatlas.p.rapidapi.com
-    description: RapidAPI gateway (primary distribution).
-  - url: https://api.aduatlas.example.com
-    description: Direct API host (self-serve API key).
+  - url: https://adu-atlas-api.onrender.com
+    description: Live production API (direct host).
+  - url: https://adu-atlas-api.p.rapidapi.com
+    description: RapidAPI gateway (set to your actual RapidAPI host after listing).
 
 tags:
   - name: feasibility
