@@ -1,18 +1,20 @@
 # Tests
 
-Integration and unit tests for the CA ADU Zoning API. Everything runs fully
-offline: no live network, no real Supabase, and no real Stripe. External systems
-(Playwright, the Municode/Stripe HTTP APIs, the Supabase client and the
-`increment_api_usage` RPC) are mocked or stubbed.
+Integration and unit tests for the ADU Atlas API. Everything here runs fully
+offline except `tests/integration`, which needs a local ephemeral PostGIS
+container (see below) and skips itself cleanly when one isn't available.
+
+For the deterministic feasibility engine's own unit tests (pure Python, no
+database, no network - the ones exercised on every request path change), see
+`services/tests/` instead; this directory covers the edge-function auth layer,
+Vitest-side, plus the full-stack integration path.
 
 ## Layout
 
 | File | Runner | What it covers |
 |---|---|---|
-| `test_pipeline.py` | pytest | State-law validation: known non-compliant fields (e.g. `owner_occupancy_required_adu=true`, `side_rear_setback_min_ft=5`) flag `more_restrictive`; missing / conditional / over-permissive values flag `needs_review`; flag precedence. Imports baselines from `scraper/pipeline/baselines.py`. |
-| `test_scraper.py` | pytest | Each adapter (ALP + Municode) locates at least one ADU section per seed city from fixture links; section parsing extracts text + numbering; the Municode API path pulls node ids from a mocked response; the Supabase upsert payload shape matches the `zoning_sections` columns. |
-| `api.test.ts` | Vitest | Edge-function auth/quota layer: `401` on missing/invalid/revoked key, `429` when over quota, allow when under quota. |
-| `billing.test.ts` | Vitest | Stripe webhook upgrades `api_keys.tier` on `checkout.session.completed` and `customer.subscription.updated`; downgrades to `free` on cancel; `400` on bad signature. |
+| `api.test.ts` | Vitest | Edge-function auth/quota layer (`supabase/functions/_shared/auth.ts`): `401` on missing/invalid/revoked key, `429` when over quota, allow when under quota. |
+| `integration/test_feasibility_flow.py` | pytest | Full request path against a real, migrated PostGIS: seeds a tiny LA fixture and drives `POST /v1/feasibility` through FastAPI's `TestClient`. |
 
 ## Python (pytest)
 
@@ -21,13 +23,13 @@ pip install -r tests/requirements-dev.txt
 cd tests && pytest
 ```
 
-- `conftest.py` puts the repo root and `scraper/pipeline` on `sys.path` so
-  `import scraper.adapters.alp` and `import baselines` / `import validate`
-  resolve exactly as they do in production.
-- `test_pipeline.py` needs only pytest. `test_scraper.py` needs the scraper
-  runtime deps (Playwright, BeautifulSoup, httpx, tenacity, supabase); if any are
-  missing it skips itself via `pytest.importorskip` rather than failing. Playwright
-  is only imported, never launched - no `playwright install` is required.
+- `tests/integration/conftest.py` puts the repo root on `sys.path` itself (no
+  root-level `conftest.py` is needed) so `import services...` resolves.
+- The integration suite is destructive (it resets the `public` schema), so it
+  only ever runs against `ADU_TEST_DB_URL` (default: the isolated PostGIS in
+  `tests/integration/docker-compose.yml` on port 54330) and skips itself
+  entirely - not a failure - if psycopg, `psql`, or that database aren't
+  reachable.
 
 ## TypeScript (Vitest)
 
@@ -35,12 +37,5 @@ cd tests && pytest
 cd tests && npm install && npm test
 ```
 
-- `vitest.config.ts` aliases `@` to the `frontend/` package (so the webhook
-  route's `@/lib/...` imports resolve, then get replaced by `vi.mock`) and aliases
-  `next/server` / `server-only` to local stubs in `stubs/` so no Next.js runtime is
-  needed.
-- `api.test.ts` imports `supabase/functions/_shared/auth.ts` directly (its only
-  external import is a type-only one, erased at build time) and drives it with a
-  fake Supabase client.
-- `billing.test.ts` imports the real webhook route and mocks Stripe, the Supabase
-  service client, and the env accessors.
+- `api.test.ts` imports `supabase/functions/_shared/auth.ts` directly and
+  drives it with a fake Supabase client - no network, no real database.

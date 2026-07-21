@@ -20,6 +20,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from .ondemand import OnDemandResolver, RepoDBAdapter
 from .repository import (
     Baseline,
     BufferedArea,
@@ -46,13 +47,24 @@ def _now() -> datetime:
 class PostgresRepository:
     """Concrete repository over a psycopg connection pool."""
 
-    def __init__(self, dsn: str, *, min_size: int = 1, max_size: int = 8):
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        min_size: int = 1,
+        max_size: int = 8,
+        ondemand: Optional[OnDemandResolver] = None,
+    ):
         if not dsn:
             raise ValueError("A Postgres DSN (SUPABASE_DB_URL) is required.")
         self._dsn = dsn
         self._pool = None  # lazy
         self._min_size = min_size
         self._max_size = max_size
+        # On-demand resolver (ingestion-lite). Built lazily from env unless one is
+        # injected. Reads ONDEMAND_ENABLED / ONDEMAND_TIMEOUT_S itself.
+        self._ondemand = ondemand
+        self._ondemand_built = ondemand is not None
 
     # ------------------------------------------------------------------
     # Connection management
@@ -65,7 +77,11 @@ class PostgresRepository:
                 self._dsn,
                 min_size=self._min_size,
                 max_size=self._max_size,
-                kwargs={"autocommit": True},
+                # prepare_threshold=None disables server-side prepared statements,
+                # which the Supabase transaction pooler (PgBouncer, port 6543)
+                # rejects ("prepared statement already exists"). Required for pooled
+                # deployments; harmless on a direct/session connection.
+                kwargs={"autocommit": True, "prepare_threshold": None},
                 open=True,
             )
         return self._pool
@@ -93,6 +109,18 @@ class PostgresRepository:
         if self._pool is not None:
             self._pool.close()
             self._pool = None
+
+    # ------------------------------------------------------------------
+    # On-demand resolver (ingestion-lite coverage)
+    # ------------------------------------------------------------------
+    def _resolver(self) -> Optional[OnDemandResolver]:
+        if not self._ondemand_built:
+            try:
+                self._ondemand = OnDemandResolver(RepoDBAdapter(self))
+            except Exception:
+                self._ondemand = None
+            self._ondemand_built = True
+        return self._ondemand
 
     # ------------------------------------------------------------------
     # Source-ref helpers
@@ -188,9 +216,9 @@ class PostgresRepository:
     # ------------------------------------------------------------------
     # Step B: parcel lookup (ST_Contains, then ST_DWithin tolerance)
     # ------------------------------------------------------------------
-    def find_parcel_for_point(
-        self, jurisdiction_id: str, point: GeoPoint, tolerance_m: float = DEFAULT_PARCEL_TOLERANCE_M
-    ) -> ParcelMatch:
+    def _query_parcel(
+        self, jurisdiction_id: str, point: GeoPoint, tolerance_m: float
+    ) -> tuple[Optional[dict[str, Any]], str]:
         pt = "ST_SetSRID(ST_MakePoint(%s, %s), 4326)"
         # 1) exact containment
         row = self._row(
@@ -207,25 +235,40 @@ class PostgresRepository:
             """,
             (jurisdiction_id, point.lon, point.lat),
         )
-        method = "st_contains"
+        if row is not None:
+            return row, "st_contains"
+        # 2) tolerance fallback (documented): nearest parcel within tolerance
+        row = self._row(
+            f"""
+            select id::text, apn, area_sqft,
+                   ST_X(centroid) as clon, ST_Y(centroid) as clat,
+                   source_url, source_layer, confidence, data_status,
+                   retrieved_at, last_verified_at
+              from parcels
+             where jurisdiction_id = %s
+               and geom is not null
+               and ST_DWithin(geom::geography, {pt}::geography, %s)
+             order by ST_Distance(geom::geography, {pt}::geography) asc
+             limit 1
+            """,
+            (jurisdiction_id, point.lon, point.lat, tolerance_m, point.lon, point.lat),
+        )
+        return row, "st_intersects"
+
+    def find_parcel_for_point(
+        self, jurisdiction_id: str, point: GeoPoint, tolerance_m: float = DEFAULT_PARCEL_TOLERANCE_M
+    ) -> ParcelMatch:
+        row, method = self._query_parcel(jurisdiction_id, point, tolerance_m)
         if row is None:
-            # 2) tolerance fallback (documented): nearest parcel within tolerance
-            row = self._row(
-                f"""
-                select id::text, apn, area_sqft,
-                       ST_X(centroid) as clon, ST_Y(centroid) as clat,
-                       source_url, source_layer, confidence, data_status,
-                       retrieved_at, last_verified_at
-                  from parcels
-                 where jurisdiction_id = %s
-                   and geom is not null
-                   and ST_DWithin(geom::geography, {pt}::geography, %s)
-                 order by ST_Distance(geom::geography, {pt}::geography) asc
-                 limit 1
-                """,
-                (jurisdiction_id, point.lon, point.lat, tolerance_m, point.lon, point.lat),
-            )
-            method = "st_intersects"
+            # On-demand: fetch parcel + zoning + flood around the point in
+            # parallel, cache them, then re-run the cached spatial query.
+            resolver = self._resolver()
+            if resolver is not None:
+                try:
+                    resolver.hydrate_point(jurisdiction_id, point)
+                except Exception:
+                    pass
+                row, method = self._query_parcel(jurisdiction_id, point, tolerance_m)
         if row is None:
             return ParcelMatch(matched=False, match_tolerance_m=tolerance_m)
 
@@ -247,11 +290,11 @@ class PostgresRepository:
     # ------------------------------------------------------------------
     # Step C: zoning lookup (spatial join; cross-zone ambiguity)
     # ------------------------------------------------------------------
-    def find_zoning_for_parcel(
+    def _query_zoning(
         self, jurisdiction_id: str, parcel_id: Optional[str], point: GeoPoint
-    ) -> ZoningResult:
+    ) -> list[dict[str, Any]]:
         if parcel_id is not None:
-            rows = self._rows(
+            return self._rows(
                 """
                 select zd.zone_code, zd.zone_name, zd.zone_category,
                        zd.source_url, zd.source_layer, zd.confidence, zd.data_status,
@@ -265,19 +308,32 @@ class PostgresRepository:
                 """,
                 (parcel_id, jurisdiction_id),
             )
-        else:
-            rows = self._rows(
-                """
-                select zone_code, zone_name, zone_category,
-                       source_url, source_layer, confidence, data_status,
-                       retrieved_at, last_verified_at
-                  from zoning_districts
-                 where jurisdiction_id = %s
-                   and geom is not null
-                   and ST_Contains(geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
-                """,
-                (jurisdiction_id, point.lon, point.lat),
-            )
+        return self._rows(
+            """
+            select zone_code, zone_name, zone_category,
+                   source_url, source_layer, confidence, data_status,
+                   retrieved_at, last_verified_at
+              from zoning_districts
+             where jurisdiction_id = %s
+               and geom is not null
+               and ST_Contains(geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+            """,
+            (jurisdiction_id, point.lon, point.lat),
+        )
+
+    def find_zoning_for_parcel(
+        self, jurisdiction_id: str, parcel_id: Optional[str], point: GeoPoint
+    ) -> ZoningResult:
+        rows = self._query_zoning(jurisdiction_id, parcel_id, point)
+        if not rows:
+            # On-demand safety net: cache the ZIMAS zoning polygon then re-join.
+            resolver = self._resolver()
+            if resolver is not None:
+                try:
+                    resolver.hydrate_zoning(jurisdiction_id, point)
+                except Exception:
+                    pass
+                rows = self._query_zoning(jurisdiction_id, parcel_id, point)
         zones: list[ZoneMatch] = []
         for r in rows:
             zones.append(
@@ -295,6 +351,23 @@ class PostgresRepository:
     # Step D: overlay lookup (hit / no_hit / source_unavailable)
     # ------------------------------------------------------------------
     def find_overlays_for_parcel(
+        self, jurisdiction_id: Optional[str], parcel_id: Optional[str], point: GeoPoint
+    ) -> list[OverlayResult]:
+        results = self._query_overlays(jurisdiction_id, parcel_id, point)
+        # On-demand: if an expected overlay layer has never been ingested for this
+        # area, fetch + cache it (FEMA flood) then re-run so we can distinguish a
+        # true no_hit from source_unavailable.
+        if any(r.status == "source_unavailable" for r in results):
+            resolver = self._resolver()
+            if resolver is not None:
+                try:
+                    resolver.hydrate_overlays(jurisdiction_id, point)
+                except Exception:
+                    pass
+                results = self._query_overlays(jurisdiction_id, parcel_id, point)
+        return results
+
+    def _query_overlays(
         self, jurisdiction_id: Optional[str], parcel_id: Optional[str], point: GeoPoint
     ) -> list[OverlayResult]:
         # Which overlay types have any features loaded at all (=> "available").

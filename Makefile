@@ -6,9 +6,6 @@
 #     PYTHONPATH=$(pwd) - whichever convention the services/ingestion subtrees
 #     land on) and their requirements.txt files are already installed. This
 #     Makefile does not install anything itself except portal npm deps.
-#   - PORTAL_DIR autodetects portal/ (target layout, docs/adr/0001) with a
-#     fallback to frontend/ (pre-pivot name) so this Makefile keeps working
-#     during the rename without edits.
 #   - JURISDICTION defaults to los_angeles (the only v1 target per the product
 #     spec); override with `make ingest-la JURISDICTION=san_diego` once other
 #     cities are ingested.
@@ -19,7 +16,7 @@ SHELL := /bin/bash
 PYTHON ?= python3
 COMPOSE ?= docker compose
 JURISDICTION ?= los_angeles
-PORTAL_DIR := $(shell [ -d portal ] && echo portal || echo frontend)
+PORTAL_DIR := portal
 
 .PHONY: help db-up db-down db-logs migrate api-dev api-build \
         ingest-la ingest-gis-la ingest-code-la ingest-qa-la \
@@ -116,7 +113,7 @@ test-python:
 
 test-portal:
 	@if [ ! -d "$(PORTAL_DIR)" ]; then \
-		echo "no portal/ or frontend/ directory found, skipping" >&2; \
+		echo "no portal/ directory found, skipping" >&2; \
 	elif node -e "process.exit(require('./$(PORTAL_DIR)/package.json').scripts.test ? 0 : 1)" 2>/dev/null; then \
 		cd "$(PORTAL_DIR)" && npm test; \
 	else \
@@ -135,7 +132,7 @@ lint-portal:
 	@if [ -d "$(PORTAL_DIR)" ]; then \
 		cd "$(PORTAL_DIR)" && npm run lint; \
 	else \
-		echo "no portal/ or frontend/ directory found, skipping" >&2; \
+		echo "no portal/ directory found, skipping" >&2; \
 	fi
 
 fmt:

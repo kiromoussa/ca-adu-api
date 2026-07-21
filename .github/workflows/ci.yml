@@ -63,10 +63,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
 
   # ---------------------------------------------------------------------------
-  # Portal: tsc + next build. Targets portal/ (the ADR target layout); falls
-  # back to frontend/ if the portal/ rename has not landed yet so this job
-  # keeps passing during the pivot instead of hard-failing on a path that
-  # doesn't exist yet.
+  # Portal: tsc + next build against portal/ (the ADR target layout).
   # ---------------------------------------------------------------------------
   portal:
     name: Portal typecheck + build
@@ -79,8 +76,6 @@ jobs:
         run: |
           if [ -d portal ]; then
             echo "dir=portal" >> "$GITHUB_OUTPUT"
-          elif [ -d frontend ]; then
-            echo "dir=frontend" >> "$GITHUB_OUTPUT"
           else
             echo "dir=" >> "$GITHUB_OUTPUT"
           fi
@@ -113,7 +108,7 @@ jobs:
 
       - name: No portal directory found
         if: steps.portal.outputs.dir == ''
-        run: echo "::warning::neither portal/ nor frontend/ exists yet, skipping"
+        run: echo "::warning::portal/ does not exist, skipping"
 
   # ---------------------------------------------------------------------------
   # Migration validation: spin up postgis/postgis:15-3.4 and apply every file
@@ -233,8 +228,6 @@ jobs:
         run: |
           if [ -d portal ]; then
             echo "dir=portal" >> "$GITHUB_OUTPUT"
-          elif [ -d frontend ]; then
-            echo "dir=frontend" >> "$GITHUB_OUTPUT"
           else
             echo "dir=" >> "$GITHUB_OUTPUT"
           fi

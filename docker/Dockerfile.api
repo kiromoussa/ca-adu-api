@@ -47,13 +47,15 @@ COPY services/requirements.txt ./services/requirements.txt
 RUN pip install --no-cache-dir -r services/requirements.txt
 
 # Application source. services/__init__.py + services/core make up the local
-# (non-PyPI) package services.api imports as `..core`; config/ and openapi/
-# are read at runtime, not imported.
+# (non-PyPI) package services.api imports as `..core`; config/ is read at
+# runtime (services/api/settings.py), not imported. openapi/openapi.yaml is
+# NOT copied: nothing in services/api reads it off disk at runtime - FastAPI
+# generates /openapi.json itself from the Pydantic models in schemas.py, and
+# the portal serves its own bundled fallback (portal/public/openapi.yaml).
 COPY services/__init__.py ./services/__init__.py
 COPY services/core ./services/core
 COPY services/api ./services/api
 COPY config ./config
-COPY openapi ./openapi
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app

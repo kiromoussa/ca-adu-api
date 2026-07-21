@@ -1,228 +1,271 @@
 # Deploy Runbook
 
-Ordered end-to-end deploy for the CA ADU Zoning API. Follow the steps in order:
-each layer depends on the one before it (database -> API -> workers that fill it
--> frontend that fronts it). For the tick-box launch gate and monitoring setup see
-`docs/LAUNCH_CHECKLIST.md`; for how the pieces fit together see
-`docs/ARCHITECTURE.md`.
+Ordered end-to-end deploy for the **ADU Atlas API** (the deterministic,
+source-cited California ADU/JADU/SB 9 feasibility API - see
+`docs/PRODUCT_SPEC.md` and `docs/adr/0001-architecture.md`). Follow the steps
+in order: each layer depends on the one before it (database -> request-path API
+-> ingestion workers that fill it -> portal that documents it -> RapidAPI
+listing that sells it).
 
-Per-component detail lives in the component READMEs, referenced at each step:
-`scraper/README.md`, `scraper/pipeline/README.md`, `supabase/functions/README.md`.
+Per-component detail lives alongside the code: `docker/Dockerfile.api` and
+`docker/Dockerfile.ingestion` (header comments document the exact entrypoint
+contract), `portal/README.md`, `docs/rapidapi/` (the RapidAPI Hub listing
+copy package).
 
 ## Conventions
 
-- `SUPABASE_SERVICE_ROLE_KEY` is a secret. It is read from the environment in
-  every component and must never be committed or exposed to the browser.
-- Root `.env.example` lists the full variable set; `frontend/.env.example`,
-  `scraper/.env.example`, and each README list the per-component subset.
-- Do all of this against the production project only after it passes on a staging
-  Supabase project and a Vercel preview.
+- `SUPABASE_SERVICE_ROLE_KEY` and every LLM/API key are secrets: read from the
+  environment only, marked `sync: false` in `render.yaml`, never committed.
+- `.env.example` at the repo root is the full variable reference for every
+  component (`services/api`, ingestion, portal). Copy it to `.env` for local
+  development: `cp .env.example .env`.
+- The request path (`POST /v1/feasibility`) is deterministic - no LLM. LLM
+  calls happen only in the offline `adu-atlas-ingest-code` cron worker
+  (extraction candidates, never auto-verified). Nothing in this runbook should
+  change that.
+- Do a full pass against a staging Supabase project / a Render + Vercel
+  preview before repeating it against production.
 
 ## Prerequisites
 
-- CLIs: `supabase`, `vercel`, `stripe` (or dashboards). Render via Blueprint.
-- Node 20+ and Python 3.12 locally to run the test suites.
-- Accounts/keys ready: Supabase prod project ref, Vercel project, Render account,
-  Stripe account, Slack webhook, and a registered domain.
+- CLIs: `supabase`, `vercel` (or the dashboards). Render is dashboard-gated for
+  the initial Blueprint connect (see Step 2).
+- Node 20+ and Python 3.12 locally if you want to run the test suites or a
+  local dry run before deploying (`make api-dev`, `make test`).
+- Accounts/keys ready: a Supabase project, a Render account, a Vercel account,
+  a RapidAPI developer account, and a registered domain if you want a custom
+  API host instead of Render's default `*.onrender.com`.
 
-## Step 1 - Database and API (Supabase)
+## Step 1 - Database (Supabase)
 
-Schema is already authored (`supabase/migrations/0001_initial_schema.sql`,
-`0002_rls.sql`) and Phase 1 is done. Reference: `supabase/functions/README.md`.
+Schema is fully authored: `supabase/migrations/0001_initial_schema.sql`
+through `0006_rls_indexes.sql`, including `0004_enable_postgis.sql` (PostGIS
+3.3+) and `0005_adu_atlas_schema.sql` (the ADU Atlas tables - `parcels`,
+`zoning_districts`, `overlay_features`, `zoning_sections`, `zoning_rules`,
+`rule_attributes`, `state_rule_baselines`, `qa_issues`, `property_analyses` -
+see that file for exact columns).
 
 ```bash
-# Link the CLI to the production project.
-supabase link --project-ref <prod-ref>
+# Link the CLI to the target project.
+supabase link --project-ref <project-ref>
 
-# Apply migrations (0001 schema + enums + increment_api_usage(), then 0002 RLS).
+# Apply every migration in supabase/migrations/ in filename order.
 supabase db push
-
-# Seed the 8 cities (idempotent: on conflict do update).
-psql "$SUPABASE_DB_URL" -f supabase/seed.sql
-# or run supabase/seed.sql from the SQL editor against prod.
+# equivalently, against any Postgres connection string directly:
+#   make migrate   # SUPABASE_DB_URL must be set; runs each file with psql
 ```
 
-Configure Auth for production in the dashboard (local reference is
-`supabase/config.toml`): set `site_url` and `additional_redirect_urls` to the
-prod frontend origin plus `/dashboard` and `/auth/callback`.
-
-Deploy the three Edge Functions and set their secret:
+If migrations are already applied against this project (re-running this
+runbook, or connecting a service to an existing project), skip straight to
+confirming connectivity:
 
 ```bash
-supabase functions deploy cities
-supabase functions deploy adu-rules
-supabase functions deploy compliance-flags
-
-# SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected by the Edge runtime;
-# set explicitly only if serving outside Supabase.
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY"
+psql "$SUPABASE_DB_URL" -c "select postgis_full_version();"
+psql "$SUPABASE_DB_URL" -c "select to_regclass('public.property_analyses') is not null as ok;"
 ```
 
-Smoke test (a raw API key exists only after a user creates one in the dashboard,
-so this fully verifies after Step 4; a key created via SQL works earlier):
+Auth is not used for v1 (no Supabase Auth-gated endpoints; RapidAPI/direct API
+keys handle caller identity - see `services/api/rapidapi.py`), so there is no
+`site_url` / redirect URL configuration step here.
+
+## Step 2 - API + ingestion workers (Render)
+
+Blueprint: root `render.yaml` provisions four services from the two Docker
+images in `docker/`:
+
+| Service | Type | Image | Purpose |
+|---|---|---|---|
+| `adu-atlas-api` | web | `docker/Dockerfile.api` | `POST /v1/feasibility` + read-only metadata endpoints. Deterministic, no LLM. |
+| `adu-atlas-ingest-gis` | cron (Mon 03:00 UTC) | `docker/Dockerfile.ingestion` | LA parcels/zoning, FEMA flood, CAL FIRE FHSZ -> `parcels`, `zoning_districts`, `overlay_features`. |
+| `adu-atlas-ingest-code` | cron (Mon 04:30 UTC) | `docker/Dockerfile.ingestion` | LAMC sections + offline LLM extraction candidates -> `zoning_sections`, `zoning_rules`, `rule_attributes`. |
+| `adu-atlas-qa-crosscheck` | cron (Mon 06:00 UTC) | `docker/Dockerfile.ingestion` | Baselines vs. extracted rules -> `qa_issues`. Runs last so it reads the current week's ingestion output. |
+
+1. **Connect the Blueprint** (dashboard-gated - Render must install its GitHub
+   App on the repo; this step cannot be scripted headlessly): Render
+   Dashboard -> New -> Blueprint -> connect `github.com/kiromoussa/ca-adu-api`.
+   Render detects `render.yaml` and proposes all four services.
+2. **Set every `sync: false` secret once**, per service, in the dashboard:
+   - `adu-atlas-api`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+     `SUPABASE_DB_URL`, `RAPIDAPI_PROXY_SECRET` (only if RapidAPI's gateway is
+     configured to send `X-RapidAPI-Proxy-Secret`; leave unset otherwise -
+     `services/api/rapidapi.py` skips that check when it is unset),
+     `GOOGLE_MAPS_GEOCODING_API_KEY` / `MAPBOX_ACCESS_TOKEN` (optional
+     geocoder-fallback keys; `GEOCODER_PROVIDER=census` and `WEB_CONCURRENCY=2`
+     already ship as plain `value:` entries in `render.yaml`, not secrets).
+   - `adu-atlas-ingest-gis`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+   - `adu-atlas-ingest-code`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, plus
+     exactly one LLM provider - either `ANTHROPIC_API_KEY`, or the
+     `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` /
+     `AZURE_OPENAI_DEPLOYMENT` / `AZURE_OPENAI_API_VERSION` quartet.
+   - `adu-atlas-qa-crosscheck`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+     `SLACK_WEBHOOK_URL`, `HCD_APR_DATASET_URL`, and the same LLM provider
+     vars as `adu-atlas-ingest-code`.
+3. **Deploy `adu-atlas-api`** and confirm the health check passes: Render's
+   `healthCheckPath: /v1/health` (declared in `render.yaml`) must return 200
+   before the service is marked live. Watch the deploy logs for the same
+   `docker build -f docker/Dockerfile.api -t adu-atlas-api .` your local
+   `make api-build` runs.
+4. **Trigger one manual run of `adu-atlas-ingest-gis` first** (Render dashboard
+   -> service -> "Trigger Run"), since the API needs `parcels` and
+   `zoning_districts` populated for LA City before `/v1/feasibility` can
+   resolve a real address. Confirm rows land: `select count(*) from parcels;`
+   and `select count(*) from zoning_districts;`.
+5. Trigger `adu-atlas-ingest-code` next, then `adu-atlas-qa-crosscheck` - or
+   just wait for their staggered Monday schedule (03:00 -> 04:30 -> 06:00 UTC)
+   now that the Blueprint is live. All three crons have `autoDeploy: false`, so
+   a new ingestion image is only rolled out when you intentionally redeploy
+   that service, not on every push to `main`.
+6. Note the API's Render URL (`https://adu-atlas-api.onrender.com` or your
+   custom domain once mapped) - the portal and the RapidAPI listing both need
+   it.
+
+Local dry run before touching Render (optional, requires the local Postgres
+stack):
 
 ```bash
-curl -s "https://<prod-ref>.supabase.co/functions/v1/cities" \
-  -H "x-api-key: <raw-api-key>"
+cp .env.example .env      # fill in SUPABASE_DB_URL etc.
+make db-up                # local PostGIS via docker-compose
+make migrate               # applies supabase/migrations/*.sql locally
+make api-dev                # uvicorn --reload against services.api.main:app
+make ingest-gis-la           # python -m ingestion.gis.run all
 ```
 
-## Step 2 - Scraper worker (Render)
+## Step 3 - Developer portal (Vercel)
 
-Reference: `scraper/README.md` and the Blueprint `scraper/render.yaml` (cron
-service `ca-adu-scraper`, schedule `0 3 * * 1`, `autoDeploy: false`).
+Config: `portal/vercel.json` (framework `nextjs`, `npm install` / `npm run
+build` / `.next` output). Reference: `portal/README.md`.
 
-1. In Render, create a Blueprint from this repo (or copy the `scraper/render.yaml`
-   service block into a root-level `render.yaml`).
-2. Confirm the commands from the Blueprint:
-   - Build: `pip install -r scraper/requirements.txt && python -m playwright install --with-deps chromium`
-   - Start: `python -m scraper.main`
-3. Set secrets in the dashboard (declared `sync: false`): `SUPABASE_URL`,
-   `SUPABASE_SERVICE_ROLE_KEY`.
-4. Keep the tuning vars (`SCRAPER_HEADLESS=true`, `SCRAPER_RATE_LIMIT_SECONDS=2`,
-   `SCRAPER_MAX_SECTIONS_PER_CITY=25`, `PLAYWRIGHT_BROWSERS_PATH=0`,
-   `PYTHON_VERSION=3.12.7`).
-5. Trigger one manual run and confirm `zoning_sections` fills and
-   `cities.last_scraped_at` is stamped. For a fast check set
-   `SCRAPER_MAX_SECTIONS_PER_CITY=3`.
-
-Local dry run before deploying:
+1. In the Vercel dashboard, import the repo and set **Root Directory =
+   `portal`**.
+2. Enable the project setting **"Include source files outside of the Root
+   Directory in the Build Step"** (Project Settings -> General -> Root
+   Directory). The portal reads `../config/plans.yaml`,
+   `../config/jurisdictions.yaml`, and `../config/sources.yaml` directly at
+   build/request time (no hardcoded pricing or coverage claims); without this
+   setting those files are outside Vercel's upload and the build fails.
+   `portal/next.config.js` already sets `outputFileTracingRoot` to the repo
+   root to match.
+3. Set environment variables (Production, and Preview with the same or a
+   staging value) per `portal/.env.example`:
+   - `NEXT_PUBLIC_API_BASE_URL` - the Render API URL from Step 2 (no trailing
+     slash), e.g. `https://adu-atlas-api.onrender.com`. Powers the live
+     OpenAPI spec on `/docs` and the live entries on `/changelog`; both
+     degrade gracefully (bundled fallback spec / empty state) if unset or
+     unreachable.
+   - `NEXT_PUBLIC_RAPIDAPI_URL` - the RapidAPI listing URL from Step 4 below
+     (the "Get API key on RapidAPI" call to action on every page).
+4. Deploy:
 
 ```bash
-pip install -r scraper/requirements.txt
-python -m playwright install --with-deps chromium
-cp scraper/.env.example scraper/.env   # set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
-python -m scraper.main
+cd portal
+vercel link            # first time only, links to the Vercel project
+vercel                  # preview deploy
+vercel --prod           # production deploy
 ```
 
-## Step 3 - Extraction + validation pipeline (Render)
+5. Confirm `/`, `/coverage`, `/docs`, `/pricing`, and `/changelog` all return
+   200 and that `/coverage` and `/pricing` reflect `config/jurisdictions.yaml`
+   and `config/plans.yaml` (not hardcoded copy).
 
-Reference: `scraper/pipeline/README.md`. This layer turns `zoning_sections` text
-into `adu_rules`, so it must run after Step 2. `scraper/pipeline/` has no
-`render.yaml` of its own; create a second Render `cron` service modeled on the
-scraper's.
+## Step 4 - RapidAPI listing
 
-1. Create a Render `cron` service for the pipeline.
-   - Build: `pip install -r scraper/pipeline/requirements.txt`
-   - Start: `python scraper/pipeline/run.py`
-2. Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, plus exactly one LLM
-   provider:
-   - Azure OpenAI: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`,
-     `AZURE_OPENAI_DEPLOYMENT` (optional `AZURE_OPENAI_API_VERSION`), or
-   - Anthropic: `ANTHROPIC_API_KEY` (default model `claude-opus-4-8`).
-   If all Azure vars are set, the Azure path is used; otherwise Anthropic.
-3. Schedule shortly after the scraper (for example `30 3 * * 1`).
-4. Verify with a dry run before writing:
+Reference: `docs/rapidapi/LISTING.md` (exact copy package - title, short/long
+description, category), `docs/rapidapi/PRICING.md` (plan tiers - must match
+`config/plans.yaml` verbatim; update the doc if the config changes, not the
+other way around), `docs/rapidapi/RESPONSE_EXAMPLES.md` (sample
+request/response bodies for the listing's example calls), and
+`docs/rapidapi/FAQ.md`.
+
+1. In the RapidAPI provider dashboard, add a new API pointing at the Render
+   API's base URL from Step 2, using `openapi/openapi.yaml` (or the live
+   `{NEXT_PUBLIC_API_BASE_URL}/openapi.json` FastAPI serves) to define the
+   endpoints.
+2. Copy each section of `docs/rapidapi/LISTING.md` verbatim into the matching
+   Hub form field. No emojis, no em dashes (hyphen only) - the listing copy is
+   already written that way; do not "improve" it in transit.
+3. Configure plan tiers from `config/plans.yaml` (`plans.*.monthly_quota`,
+   `plans.*.rate_limit_per_minute`, `plans.*.rapidapi_plan_slug`) matching
+   `docs/rapidapi/PRICING.md`.
+4. If RapidAPI's gateway is configured to inject a shared proxy secret, set the
+   same value in RapidAPI's dashboard and in Render's `RAPIDAPI_PROXY_SECRET`
+   for `adu-atlas-api` (Step 2). `services/api/rapidapi.py` only enforces the
+   check when that secret is configured server-side.
+5. Take the resulting listing URL and set it as `NEXT_PUBLIC_RAPIDAPI_URL` in
+   Vercel (Step 3), redeploying the portal.
+
+## Step 5 - Smoke test
+
+Confirm the full path end to end against the deployed API. This calls
+`POST /v1/feasibility` directly with a bare `X-API-Key` header (bypasses the
+RapidAPI gateway, resolved as a `direct`-plan caller by
+`services/api/rapidapi.py` - fine for a deploy smoke test; real consumers
+authenticate through RapidAPI's `X-RapidAPI-Key` / `X-RapidAPI-Host` headers
+instead).
 
 ```bash
-pip install -r scraper/pipeline/requirements.txt
-python scraper/pipeline/run.py --dry-run --limit 5   # extract + validate, no writes
-python scraper/pipeline/run.py                       # process new/changed sections
+API_BASE=https://adu-atlas-api.onrender.com   # or your custom domain
+
+# Health check (also what Render's healthCheckPath polls).
+curl -sS "$API_BASE/v1/health"
+
+# Feasibility analysis for a real, previously-verified LA City address.
+curl -sS -X POST "$API_BASE/v1/feasibility" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: smoke-test-key" \
+  -d '{
+    "address": "509 N Avenue 50, Los Angeles, CA 90042",
+    "project_type": "detached_adu"
+  }' | python3 -m json.tool
 ```
 
-Confirm `adu_rules` rows appear with a `compliance_flag`, `compliance_notes`
-populated, and `last_validated_at` set.
+Expect a 200 with a terminal `feasibility_status`, the resolved zone
+(`RD1.5` per LAMC 12.22), source-cited `provenance` (parcel via LA County
+ArcGIS, zoning via ZIMAS, FEMA flood overlay), and the disclaimer string from
+`services/core/constants.py` verbatim. A `503`/`insufficient_data` result
+instead of a fabricated one means an upstream ArcGIS source was unavailable -
+correct degrade behavior, not a bug; retry, or check `source_registry` /
+`ingest_runs` for the last successful ingestion run.
 
-## Step 4 - Frontend, dashboard, billing (Vercel + Stripe)
+Re-run the same request body a second time and confirm it returns
+immediately from the 24-hour dedupe cache (see `config/plans.yaml`
+`billing.dedupe.window_hours`) without incrementing quota.
 
-Config: `frontend/vercel.json`. Env source of truth: `frontend/.env.example`.
-
-### 4a. Stripe products and prices
-
-Create monthly recurring Prices for Starter ($19) and Pro ($49); Free is the
-default tier (no checkout) and Enterprise is contact-sales. Record the price ids
-for `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` (mapped in
-`frontend/lib/stripe.ts`). Tier definitions live in `frontend/lib/pricing.ts`.
-
-### 4b. Deploy the app
+## Step 6 - Tests before/after any redeploy
 
 ```bash
-cd frontend
-vercel link           # link to the Vercel project (first time)
-vercel                # preview deploy
-vercel --prod         # production deploy
+# Python: services/core + services/api + ingestion lint and tests.
+ruff check services ingestion tests
+ruff format --check services ingestion tests
+pytest -q
+
+# OpenAPI 3.1 spec validity.
+make openapi-validate
+
+# Portal typecheck + build.
+cd portal && npx tsc --noEmit && npm run build
 ```
 
-Set env in the Vercel project (Production, and Preview with test/staging values):
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`,
-`NEXT_PUBLIC_SITE_URL`. Every helper in `frontend/lib/env.ts` throws on a missing
-var, so a misconfiguration fails fast.
-
-### 4c. Domain and API routing
-
-- Add the domain in Vercel and point DNS at it.
-- Expose the API under `/v1/*` either via an `api.` subdomain CNAMEd to
-  `<prod-ref>.supabase.co` or via Vercel rewrites
-  (`/v1/:path*` -> `https://<prod-ref>.supabase.co/functions/v1/:path*`).
-- Ensure `docs/openapi.yaml` `servers:` matches the live host.
-
-### 4d. Stripe webhook
-
-Create a webhook at `https://<prod-domain>/api/stripe/webhook` subscribed to
-`checkout.session.completed`, `customer.subscription.created`,
-`customer.subscription.updated`, `customer.subscription.deleted` (handled in
-`frontend/app/api/stripe/webhook/route.ts`). Put the signing secret in
-`STRIPE_WEBHOOK_SECRET`. Test locally first:
-
-```bash
-stripe listen --forward-to localhost:3000/api/stripe/webhook
-stripe trigger checkout.session.completed
-```
-
-Confirm a completed checkout updates `api_keys.tier` and stores the Stripe
-customer/subscription ids; confirm a cancellation downgrades to `free`.
-
-## Step 5 - Compliance QA worker (Render, Prompt 6)
-
-Reference: `docs/ARCHITECTURE.md` section 5. The `qa_alerts` table already exists;
-the worker code lands with Prompt 6. When it does, create a third Render `cron`
-service for `scraper/qa/` with secrets `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, `SLACK_WEBHOOK_URL`, `HCD_APR_DATASET_URL`, scheduled
-after the pipeline (for example `0 5 * * 1`).
-
-## Step 6 - Tests before flipping to production
-
-Run both suites and confirm green (see spec Prompt 7). Do not `npm install` or
-heavy installs in CI-restricted contexts; run these locally or in CI.
-
-```bash
-# Python: scraper + pipeline self-checks and tests
-python -m py_compile scraper/pipeline/*.py
-python scraper/pipeline/validate.py     # compliant / more_restrictive / needs_review cases
-pytest                                  # scraper + pipeline integration tests
-
-# Frontend: unit + e2e
-cd frontend
-npm test                                # vitest (pricing, keys, stripe)
-npm run test:e2e                        # playwright (landing)
-```
-
-## Step 7 - Cutover
-
-1. Swap Stripe env from test to live keys; recreate the webhook against the live
-   endpoint.
-2. Confirm all prod secrets are set (Supabase, Render x2/x3, Vercel) and none are
-   committed.
-3. Run the full manual end-to-end check from `docs/LAUNCH_CHECKLIST.md` section 6
-   (sign up, generate key, call API, hit 429, upgrade, verify new quota).
-4. Flip DNS to production and watch the `usage_logs` / `qa_alerts` dashboards for
-   the first 24 hours.
+CI (`.github/workflows/ci.yml`) runs all of the above plus PostGIS migration
+validation, pip-audit, gitleaks, and npm audit on every push/PR to `main`;
+treat a red CI run on `main` as blocking before triggering a Render redeploy.
 
 ## Ongoing operations
 
-- Scraper runs weekly (`0 3 * * 1`); pipeline runs after it; both are
-  `autoDeploy: false`, so deploy new code intentionally rather than on push.
-- Reprocess everything after a baseline change:
-  `python scraper/pipeline/run.py --all`.
-- Regenerate frontend types after any schema migration:
-  `cd frontend && npm run gen:types`.
-- New Edge Function code ships with `supabase functions deploy <name>`.
-
-<!-- easymd:log -->
-## 🧾 Activity
-- agent created the document (9177 chars)
-- agent replaced the document (9276 chars)
-- agent replaced the document (9319 chars)
-- agent replaced the document (9362 chars)
-<!-- /easymd:log -->
+- `adu-atlas-api` has `autoDeploy: true` (deploys on every push to `main`);
+  all three cron workers have `autoDeploy: false` (deploy them intentionally
+  from the Render dashboard after verifying an ingestion-image change).
+- Cron schedule is staggered by design (GIS 03:00 -> code 04:30 -> QA
+  06:00 UTC, Mondays) so each stage reads data the previous stage already
+  refreshed that run; do not reorder without updating `render.yaml`'s
+  comments.
+- Reprocess a jurisdiction on demand: `make ingest-la
+  JURISDICTION=los_angeles` (GIS + code ingestion; run `make ingest-qa-la`
+  separately afterward).
+- Rotate `RAPIDAPI_PROXY_SECRET` by updating it in both the RapidAPI gateway
+  config and Render's `adu-atlas-api` env vars together - a mismatch fails
+  every RapidAPI-routed request with 401.
+- Adding a new jurisdiction: update `config/jurisdictions.yaml`
+  (`coverage_status: planned -> ingesting -> production` only once its
+  sources + rules are ingested, tested, and verified - the portal's
+  `/coverage` page reads this file directly), then extend `ingestion/gis` and
+  `ingestion/code` per their READMEs.

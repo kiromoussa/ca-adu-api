@@ -18,8 +18,10 @@ from services.core.feasibility import (
     run_feasibility,
     select_feasibility_status,
 )
+from services.core.feasibility import flood_hit_severity
 from services.core.geocode import StaticGeocoder
 from services.core.repository import (
+    BufferedArea,
     GeoPoint,
     OverlayResult,
     RuleAttr,
@@ -188,6 +190,115 @@ def test_more_restrictive_local_rule_forces_professional_review():
     assert setback.value == 6
     assert setback.state_baseline == 4
     assert setback.compliance_flag == "possibly_more_restrictive_than_state_baseline"
+
+
+def _compliant_r1_ruleset() -> ZoningRuleSet:
+    src = SourceRef(
+        source_url="https://codelibrary.amlegal.com/lamc",
+        source_title="LAMC 12.22 A.33", source_section="LAMC 12.22 A.33",
+        retrieved_at=datetime.now(timezone.utc), last_verified_at=datetime.now(timezone.utc),
+        confidence="high", data_status="current",
+    )
+    return ZoningRuleSet(
+        zone_code="R1", project_type="detached_adu", review_status="verified",
+        attributes=[
+            RuleAttr("max_height_detached_standard_ft", 16, "ft", "floor", src),
+            RuleAttr("side_rear_setback_min_ft", 4, "ft", "ceiling", src),
+            RuleAttr("parking_required", False, None, "must_equal", src),
+        ],
+    )
+
+
+def _flood_source() -> SourceRef:
+    return SourceRef(
+        source_url="https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28",
+        source_title="FEMA NFHL flood hazard", source_layer="NFHL/28",
+        retrieved_at=datetime.now(timezone.utc), last_verified_at=datetime.now(timezone.utc),
+        confidence="high", data_status="current",
+    )
+
+
+# --- FEMA flood tuning (item 3) -------------------------------------------
+def test_flood_severity_classification_unit():
+    # Minimal-hazard designations are info; only real SFHAs are warnings.
+    for z in ("X", "D", "AREA OF MINIMAL FLOOD HAZARD", "X (unshaded)", ""):
+        ov = OverlayResult("flood", "hit", raw_values={"FLD_ZONE": z})
+        assert flood_hit_severity(ov) == "info", z
+    for z in ("A", "AE", "AH", "AO", "AR", "A99", "V", "VE"):
+        ov = OverlayResult("flood", "hit", raw_values={"FLD_ZONE": z})
+        assert flood_hit_severity(ov) == "warning", z
+    # Missing designation degrades to info (not a real SFHA assertion).
+    assert flood_hit_severity(OverlayResult("flood", "hit", raw_values=None)) == "info"
+
+
+def test_zone_x_flood_hit_is_info_and_does_not_constrain():
+    repo = fakes.FakeRepository(
+        jurisdiction=fakes.la_jurisdiction("production"),
+        parcel=fakes.matched_parcel(),
+        zoning=fakes.r1_zoning(),
+        overlays=[
+            OverlayResult("flood", "hit", raw_values={"FLD_ZONE": "X"}, source=_flood_source()),
+            OverlayResult("fire", "no_hit"),
+        ],
+        ruleset=_compliant_r1_ruleset(),
+    )
+    outcome = run_feasibility(repo, _geocoder(), _input(), consumer_id="c_1")
+    # Zone X is a hit but must NOT downgrade feasibility.
+    assert outcome.feasibility_status == "likely_feasible"
+    model = FeasibilityResponse.model_validate(outcome.result)
+    flood = next(f for f in model.overlay_findings if f.overlay_type == "flood")
+    assert flood.status == "hit"
+    assert flood.severity == "info"
+
+
+def test_zone_ae_flood_hit_is_warning_and_constrains():
+    repo = fakes.FakeRepository(
+        jurisdiction=fakes.la_jurisdiction("production"),
+        parcel=fakes.matched_parcel(),
+        zoning=fakes.r1_zoning(),
+        overlays=[
+            OverlayResult("flood", "hit", raw_values={"FLD_ZONE": "AE"}, source=_flood_source()),
+            OverlayResult("fire", "no_hit"),
+        ],
+        ruleset=_compliant_r1_ruleset(),
+    )
+    outcome = run_feasibility(repo, _geocoder(), _input(), consumer_id="c_1")
+    # A real SFHA downgrades an otherwise-feasible parcel to constrained.
+    assert outcome.feasibility_status == "likely_constrained"
+    model = FeasibilityResponse.model_validate(outcome.result)
+    flood = next(f for f in model.overlay_findings if f.overlay_type == "flood")
+    assert flood.severity == "warning"
+
+
+# --- Approximate envelope (item 2) ----------------------------------------
+def test_envelope_emits_value_and_orientation_limitation():
+    buffered = BufferedArea(
+        available=True, buffered_area_sqm=400.0, orientation_known=False,
+        inset_m=1.2192, source=fakes.matched_parcel().source,
+    )
+    repo = fakes.FakeRepository(
+        jurisdiction=fakes.la_jurisdiction("production"),
+        parcel=fakes.matched_parcel(),
+        zoning=fakes.r1_zoning(),
+        overlays=[OverlayResult("flood", "no_hit"), OverlayResult("fire", "no_hit")],
+        ruleset=_compliant_r1_ruleset(),
+        buffered=buffered,
+    )
+    outcome = run_feasibility(
+        repo, _geocoder(), _input(options={"include_envelope": True}), consumer_id="c_1"
+    )
+    model = FeasibilityResponse.model_validate(outcome.result)
+    env = model.approximate_envelope
+    assert env is not None and env.available is True
+    # Emits a value ...
+    assert env.buildable_area_sqft is not None
+    assert env.buildable_area_sqft.value is not None and env.buildable_area_sqft.value > 0
+    # ... AND flags the unknown-orientation limitation (never false precision).
+    assert any(
+        lim.code == "envelope_orientation_unknown" for lim in model.limitations
+    )
+    # Orientation-unknown envelope routes the overall status to review.
+    assert outcome.feasibility_status == "needs_professional_review"
 
 
 def test_cross_zone_ambiguity_forces_review():

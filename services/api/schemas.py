@@ -178,6 +178,9 @@ class DevelopmentConstraints(_Resp):
 class OverlayFinding(_Resp):
     overlay_type: OverlayType
     status: Literal["hit", "no_hit", "source_unavailable"]
+    # Severity of a hit: "info" for minimal-hazard designations (e.g. FEMA Zone
+    # X/D) that do not constrain, "warning" for genuinely constraining hazards.
+    severity: Optional[Literal["info", "warning", "critical"]] = None
     raw_values: Optional[dict[str, Any]] = None
     description: Optional[str] = None
     provenance: Optional[Provenance] = None

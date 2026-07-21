@@ -62,6 +62,48 @@ BILLABLE_STATUSES = (
 # Overlay types that, on a hit, constrain feasibility.
 HAZARD_OVERLAY_TYPES = ("flood", "fire", "coastal", "hillside")
 
+# FEMA flood tuning. Only real Special Flood Hazard Areas (SFHAs) actually
+# constrain an ADU. Minimal-hazard designations (Zone X, Zone D, and any "area of
+# minimal flood hazard") are recorded as informational overlay hits but must NOT
+# downgrade feasibility_status. The raw designation + provenance are kept either
+# way; we never discard the source value.
+SFHA_FLOOD_ZONES = frozenset(
+    {"A", "AE", "AH", "AO", "AR", "A99", "V", "VE"}
+)
+
+
+def _flood_zone_token(ov: OverlayResult) -> Optional[str]:
+    """Extract the FEMA FLD_ZONE token from an overlay hit (case-insensitive)."""
+    raw = ov.raw_values or {}
+    candidate: Optional[Any] = None
+    for key in ("FLD_ZONE", "fld_zone", "designation", "zone"):
+        if isinstance(raw, dict) and raw.get(key):
+            candidate = raw.get(key)
+            break
+    if candidate is None:
+        candidate = ov.description
+    if candidate is None:
+        return None
+    return str(candidate).strip().upper()
+
+
+def flood_hit_severity(ov: OverlayResult) -> str:
+    """Classify a flood overlay hit as ``warning`` (SFHA) or ``info`` (minimal).
+
+    A designation is constraining only when its zone token is a recognized SFHA
+    (A/AE/AH/AO/AR/A99/V/VE). Everything else - Zone X, Zone D, "area of minimal
+    flood hazard", or an absent designation - is informational and does not
+    downgrade feasibility.
+    """
+    token = _flood_zone_token(ov)
+    if not token:
+        return "info"
+    # A token may look like "AE" or "X (unshaded)" or "AREA OF MINIMAL FLOOD HAZARD".
+    head = token.replace("(", " ").replace(")", " ").split()[0] if token.split() else token
+    if head in SFHA_FLOOD_ZONES:
+        return "warning"
+    return "info"
+
 # LA single-family zone-code prefixes used for coarse SB 9 gating. Anything not
 # clearly single-family is treated as unknown (routed to review), never denied.
 _LA_SINGLE_FAMILY_PREFIXES = ("R1", "RS", "RE", "RA", "RW1", "RD")
@@ -660,13 +702,29 @@ def run_feasibility(
     for ov in overlays:
         if ov.source is not None:
             sources.append(ov.source)
+        severity: Optional[str] = None
         if ov.status == "hit" and ov.overlay_type in HAZARD_OVERLAY_TYPES:
-            hazard_hit = True
+            if ov.overlay_type == "flood":
+                # Minimal-hazard flood zones (X, D, ...) are info-only and do not
+                # constrain; only true SFHAs downgrade feasibility.
+                severity = flood_hit_severity(ov)
+            else:
+                severity = "warning"
+            if severity != "info":
+                hazard_hit = True
+        elif ov.status == "hit":
+            severity = "info"
+        raw_values = dict(ov.raw_values) if isinstance(ov.raw_values, dict) else ov.raw_values
+        if severity is not None:
+            if not isinstance(raw_values, dict):
+                raw_values = {}
+            raw_values.setdefault("severity", severity)
         overlay_findings.append(
             {
                 "overlay_type": ov.overlay_type,
                 "status": ov.status,
-                "raw_values": ov.raw_values,
+                "severity": severity,
+                "raw_values": raw_values,
                 "description": ov.description,
                 "provenance": _prov(ov.source, generated_at) if ov.source else None,
             }
@@ -733,9 +791,10 @@ def run_feasibility(
         if orientation_unknown:
             limitations.append(
                 {
-                    "code": "orientation_unknown",
-                    "text": "Parcel edge orientation is unknown; the envelope is a "
-                    "uniform-setback approximation pending professional review.",
+                    "code": "envelope_orientation_unknown",
+                    "text": "Parcel edge orientation (front / side / rear) is unknown; "
+                    "the envelope is a uniform-setback approximation pending "
+                    "professional review.",
                 }
             )
     elif want_envelope and juris.slug != "los_angeles":
