@@ -1,0 +1,17 @@
+# Raw HTML snapshots (debugging artifacts, can be large)
+snapshots/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Playwright
+playwright-report/
+.playwright/

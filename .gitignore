@@ -1,0 +1,36 @@
+# deps
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.key
+
+# builds
+.next/
+dist/
+build/
+out/
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
+
+# playwright / test artifacts
+test-results/
+playwright-report/
+scraper/snapshots/
+
+# local provisioning secrets
+.secrets/

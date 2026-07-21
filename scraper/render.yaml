@@ -1,0 +1,39 @@
+# Render blueprint for the CA ADU Zoning API scraper.
+#
+# Deploy from the repo root (this file lives in scraper/ but paths are
+# repo-root relative because Render clones the whole repo). Point Render at this
+# blueprint, or copy the service block into a root-level render.yaml.
+#
+# Runs weekly: Mondays at 03:00 UTC.
+
+services:
+  - type: cron
+    name: ca-adu-scraper
+    runtime: python
+    plan: starter
+    schedule: "0 3 * * 1"
+    # Install Python deps then the Chromium build + its OS libraries.
+    buildCommand: "pip install -r scraper/requirements.txt && python -m playwright install --with-deps chromium"
+    startCommand: "python -m scraper.main"
+    autoDeploy: false
+    envVars:
+      # Secrets - set these in the Render dashboard; never commit them.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Optional tuning (defaults live in scraper/config.py).
+      - key: SCRAPER_HEADLESS
+        value: "true"
+      - key: SCRAPER_RATE_LIMIT_SECONDS
+        value: "2"
+      - key: SCRAPER_MAX_SECTIONS_PER_CITY
+        value: "25"
+      - key: SCRAPER_SAVE_SNAPSHOTS
+        value: "false"
+      # Keep Playwright's browser download inside the project so the build-time
+      # install is available at runtime.
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
+      - key: PYTHON_VERSION
+        value: "3.12.7"

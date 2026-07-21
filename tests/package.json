@@ -1,0 +1,15 @@
+{
+  "name": "ca-adu-api-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vitest integration tests for the CA ADU Zoning API edge functions and Stripe billing webhook.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.2"
+  }
+}
