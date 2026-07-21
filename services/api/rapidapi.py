@@ -99,14 +99,6 @@ def parse_credentials(
         )
 
     if rapid_key or rapid_host:
-        if not verify_rapidapi_host(rapid_host, expected_host):
-            return Credentials(
-                kind="rapidapi",
-                consumer_id="",
-                rapidapi_host=rapid_host,
-                valid=False,
-                error="X-RapidAPI-Host does not match the expected gateway host.",
-            )
         if not rapid_key:
             return Credentials(
                 kind="rapidapi",
@@ -115,7 +107,13 @@ def parse_credentials(
                 valid=False,
                 error="Missing X-RapidAPI-Key.",
             )
-        # When a proxy secret is configured, it must be present and correct.
+        # Gateway authenticity check. The X-RapidAPI-Proxy-Secret is a per-API
+        # secret that RapidAPI injects on every proxied request and that consumers
+        # never see, so it is the authoritative proof the request came through the
+        # gateway. When it is configured we verify it and do NOT require an exact
+        # X-RapidAPI-Host match (the assigned host slug can change or be unknown at
+        # setup without breaking auth). Only when no proxy secret is configured do
+        # we fall back to strict host verification.
         if proxy_secret:
             incoming = _get(headers, "X-RapidAPI-Proxy-Secret")
             if not incoming or incoming != proxy_secret:
@@ -126,6 +124,14 @@ def parse_credentials(
                     valid=False,
                     error="Invalid or missing X-RapidAPI-Proxy-Secret.",
                 )
+        elif not verify_rapidapi_host(rapid_host, expected_host):
+            return Credentials(
+                kind="rapidapi",
+                consumer_id="",
+                rapidapi_host=rapid_host,
+                valid=False,
+                error="X-RapidAPI-Host does not match the expected gateway host.",
+            )
         # Prefer the stable per-user id; fall back to the key.
         user = _get(headers, "X-RapidAPI-User") or rapid_key
         plan_slug = _get(headers, "X-RapidAPI-Subscription")
