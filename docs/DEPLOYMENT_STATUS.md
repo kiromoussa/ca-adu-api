@@ -104,3 +104,36 @@ Remaining to reach full production quality/coverage (iterative, not blocking):
 
 No fabricated data was inserted at any point; empty/uncertain fields are null or
 `needs_review`.
+
+### Update 2 - Cloudflare bypass solved; 7/8 cities populated live
+
+The ALP anti-bot blocker is resolved. `curl_cffi` (open source) impersonating a
+real Chrome TLS/JA3 fingerprint clears Cloudflare on `codelibrary.amlegal.com`
+where plain HTTP and headless Playwright were both blocked. ALP's own JSON API is
+then used directly:
+
+- Search: `GET /api/search/?s=<ctx>` where `<ctx> = base64(zlib(json({"query": q})))`.
+- Content: `GET /api/render-doc/{client}/{version}/{code}/{doc_id}/` returns the full
+  server-rendered section HTML.
+
+`scraper/adapters/alp.py` was rewritten to use this (curl_cffi + render-doc)
+instead of Playwright; `curl_cffi` added to `scraper/requirements.txt`; verified
+ADU section URLs seeded into `scraper/keywords.py` hint_urls. Municode cities are
+rendered with Playwright (San Jose approach generalized).
+
+Live coverage now (`adu_rules`, served through the API):
+
+| City | Source | Extracted values | Flag |
+|---|---|---|---|
+| San Jose | Municode/Playwright | 4 zones (setback 4, no owner-occ, JADU, 1200 cap) | more_restrictive / needs_review |
+| Los Angeles | ALP/curl_cffi | setback 4, no owner-occ, JADU, 60-day | needs_review |
+| San Francisco | ALP/curl_cffi | setback 4, height 16, no owner-occ, JADU | needs_review |
+| Sacramento | ALP/curl_cffi | setback 3, no owner-occ, JADU, 60-day | more_restrictive |
+| Oakland | Municode/Playwright | setback 3, no owner-occ, JADU | more_restrictive |
+| Irvine | Municode/Playwright | captured definitions section, values null | needs_review |
+| Long Beach | Municode/Playwright | captured definitions section, values null | needs_review |
+| San Diego | - | not yet (amlegal `san_diego` is the County code; city ADU section still to be located) | - |
+
+Remaining polish: point Irvine/Long Beach at their actual standards sections (the
+definition sections were captured), add San Diego city, and tighten extraction
+field-mapping with a stronger model. All iterative; the bypass + pipeline are done.

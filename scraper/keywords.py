@@ -48,7 +48,8 @@ CITY_HINTS: dict[str, dict] = {
         "chapters": ["12.22", "12.24"],
         "titles": ["12"],
         "hint_urls": [
-            "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+            # SEC. 12.22 (contains the ADU/JADU provisions, 12.22 A.33).
+            "https://codelibrary.amlegal.com/codes/los_angeles/latest/lapz/0-0-0-6561",
         ],
     },
     "san_diego": {
@@ -68,7 +69,9 @@ CITY_HINTS: dict[str, dict] = {
         "chapters": ["207", "102"],
         "titles": ["2"],
         "hint_urls": [
-            "https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/0-0-0-17747",
+            # SEC. 207.2 (state-mandated ADU program) and 207.1 (local ADU program).
+            "https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/0-0-0-19964",
+            "https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/0-0-0-19955",
         ],
     },
     "sacramento": {
@@ -76,7 +79,8 @@ CITY_HINTS: dict[str, dict] = {
         "chapters": ["17.108", "17.228", "17.812"],
         "titles": ["17"],
         "hint_urls": [
-            "https://codelibrary.amlegal.com/codes/sacramentoca/latest/sacramento_ca/0-0-0-32996",
+            # 17.228.105 Accessory dwelling units and junior accessory dwelling units.
+            "https://codelibrary.amlegal.com/codes/sacramentoca/latest/sacramento_ca/0-0-0-36106",
         ],
     },
     # ----- Municode -----

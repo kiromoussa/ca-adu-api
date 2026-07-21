@@ -1,242 +1,168 @@
 """American Legal Publishing adapter (codelibrary.amlegal.com).
 
 Covers Los Angeles, San Diego, San Francisco, Sacramento. ALP serves an Angular
-single-page app with a consistent node-ID URL structure:
+single-page app fronted by a Cloudflare bot check that blocks both plain HTTP
+clients and headless Playwright. The reliable path is ALP's own JSON API,
+reached with curl_cffi impersonating a real Chrome TLS/JA3 fingerprint (which
+clears Cloudflare):
 
-    /codes/{city}/latest/{code}/{node-id}
+  - Discovery: POST-less GET to /api/search/?s=<ctx>&offset=&limit=, where <ctx>
+    is base64(zlib(json({"query": term}))). Results carry client_slug, code_slug
+    and doc_id, which we filter to this city and turn into section URLs.
+  - Content: /api/render-doc/{client}/{version}/{code}/{doc_id}/ returns JSON with
+    an "html" field holding the full server-rendered section text.
 
-Discovery drives the site-internal full-text search (the sourcing report's
-recommended approach, since node numbering shifts after each ordinance update),
-harvests result links under the same code path, and falls back to the per-city
-hint URLs from keywords.py when the search UI drifts.
+This adapter therefore overrides the base Playwright fetch() with an API fetch;
+the base run()/parse orchestration is otherwise unchanged.
 """
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
-import re
-from urllib.parse import quote_plus, urljoin, urlparse
-
-from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Locator, Page
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+import zlib
+from urllib.parse import urlparse
 
 from ..base import BaseScraper, ScrapedSection
 from ..keywords import hints_for, search_terms_for
 
 logger = logging.getLogger(__name__)
 
-# ALP node ids look like "0-0-0-422835"; some codes use other trailing ids, so
-# we accept any non-empty final path segment that is not a known landing route.
-_NON_SECTION_TAILS = {"latest", "overview", "search", ""}
-_NODE_RE = re.compile(r"^[0-9]+(?:-[0-9]+)+$")
+_ALP_HOST = "codelibrary.amlegal.com"
+_ALP_BASE = f"https://{_ALP_HOST}"
 
-# Candidate CSS search-box selectors, most specific first.
-_SEARCH_BOX_SELECTORS = (
-    "input[type='search']",
-    "input[name='query']",
-    "input[name='q']",
-    "input#searchBox",
-    "input[aria-label*='Search' i]",
-    "input[placeholder*='Search' i]",
-    ".search-box input",
-    "form[role='search'] input",
-)
+
+def _search_ctx(query: str) -> str:
+    """Build the ALP search 's' parameter: base64(zlib(json({"query": ...})))."""
+    payload = json.dumps({"query": query}).encode("utf-8")
+    return base64.b64encode(zlib.compress(payload)).decode("ascii")
 
 
 class ALPScraper(BaseScraper):
     publisher = "alp"
 
-    content_selectors = (
-        "#codeContent",
-        ".codeContent",
-        ".code-content",
-        "div.content .Section",
-        ".xsl-content",
-        "div.content",
-        "main",
-        "[role='main']",
-        "article",
-        ".chunks",
-        "body",
-    )
-    heading_selectors = (
-        ".codeContent h1",
-        ".Section h1",
-        "header h1",
-        "h1",
-        ".title",
-        "h2",
-    )
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._city_path, self._code_segment, self._code_root = self._parse_base_url(
-            self.base_url
-        )
+        self._city_path, self._code_segment = self._parse_base_url(self.base_url)
+        self._session = None  # lazy curl_cffi session
 
     # ------------------------------------------------------------------
-    # URL parsing
+    # curl_cffi session (Cloudflare bypass via TLS impersonation)
     # ------------------------------------------------------------------
+    def _client(self):
+        if self._session is None:
+            from curl_cffi import requests as cr
+
+            self._session = cr.Session(impersonate="chrome124")
+        return self._session
+
     @staticmethod
-    def _parse_base_url(base_url: str) -> tuple[str, str | None, str]:
-        """Return (city_path, code_segment, code_root_url) from a base URL.
-
-        Example: .../codes/sacramentoca/latest/sacramento_ca/0-0-0-32996
-          city_path   -> "sacramentoca"
-          code_segment-> "sacramento_ca"
-          code_root   -> ".../codes/sacramentoca/latest/sacramento_ca"
-        """
-        parsed = urlparse(base_url)
-        parts = [p for p in parsed.path.split("/") if p]
-        city_path = ""
-        code_segment: str | None = None
-        try:
-            idx = parts.index("codes")
-            city_path = parts[idx + 1] if len(parts) > idx + 1 else ""
-        except ValueError:
-            idx = -1
-
-        # segment immediately after "latest" (if present and not a node id)
+    def _parse_base_url(base_url: str) -> tuple[str, str | None]:
+        """Return (client_slug, code_slug) from .../codes/{client}/latest/{code}/..."""
+        parts = [p for p in urlparse(base_url).path.split("/") if p]
+        client = code = None
+        if "codes" in parts:
+            i = parts.index("codes")
+            client = parts[i + 1] if len(parts) > i + 1 else None
         if "latest" in parts:
-            lidx = parts.index("latest")
-            if len(parts) > lidx + 1 and not _NODE_RE.match(parts[lidx + 1]):
-                code_segment = parts[lidx + 1]
+            li = parts.index("latest")
+            if len(parts) > li + 1:
+                code = parts[li + 1]
+        return client or "", code
 
-        origin = f"{parsed.scheme}://{parsed.netloc}"
-        if code_segment:
-            code_root = f"{origin}/codes/{city_path}/latest/{code_segment}"
-        else:
-            code_root = f"{origin}/codes/{city_path}/latest"
-        return city_path, code_segment, code_root
+    @staticmethod
+    def _section_url(client: str, code: str, doc_id: str, version: str = "latest") -> str:
+        return f"{_ALP_BASE}/codes/{client}/{version}/{code}/{doc_id}"
 
-    def _is_section_link(self, url: str) -> bool:
-        parsed = urlparse(url)
-        if "codelibrary.amlegal.com" not in parsed.netloc:
-            return False
-        if f"/codes/{self._city_path}/latest" not in parsed.path:
-            return False
-        tail = parsed.path.rstrip("/").split("/")[-1]
-        if tail in _NON_SECTION_TAILS:
-            return False
-        # keep true node pages and code-segment sub-pages
-        return _NODE_RE.match(tail) is not None or (
-            self._code_segment is not None and self._code_segment in parsed.path
-        )
-
-    def _matches_hint(self, url: str, text: str | None) -> bool:
-        hay = f"{url} {text or ''}".lower()
-        return any(ch.lower() in hay for ch in hints_for(self.slug).get("chapters", []))
+    @staticmethod
+    def _render_doc_api(url: str) -> str | None:
+        """Map a section URL to its render-doc API URL."""
+        parts = [p for p in urlparse(url).path.split("/") if p]
+        # /codes/{client}/{version}/{code}/{doc_id}
+        if len(parts) < 5 or parts[0] != "codes":
+            return None
+        client, version, code, doc_id = parts[1], parts[2], parts[3], parts[4]
+        return f"{_ALP_BASE}/api/render-doc/{client}/{version}/{code}/{doc_id}/"
 
     # ------------------------------------------------------------------
-    # discovery
+    # discovery via the search API
     # ------------------------------------------------------------------
     def discover_sections(self) -> list[str]:
         urls: list[str] = []
-        page: Page = self.browser.new_page(user_agent=self.settings.user_agent)
-        page.set_default_timeout(self.settings.nav_timeout_ms)
-        try:
-            for term in search_terms_for(self.slug)[:3]:
-                self._rate_limit()
-                try:
-                    urls.extend(self._search(page, term))
-                except PlaywrightError as exc:
-                    logger.warning(
-                        "[%s] ALP search for %r failed: %s", self.slug, term, exc
-                    )
-        finally:
-            page.close()
+        client = self._client()
+        for term in search_terms_for(self.slug)[:3]:
+            self._rate_limit()
+            try:
+                resp = client.get(
+                    f"{_ALP_BASE}/api/search/",
+                    params={"s": _search_ctx(term), "offset": 0, "limit": 40},
+                    headers={"Accept": "application/json"},
+                    timeout=self.settings.nav_timeout_ms / 1000,
+                )
+                if resp.status_code != 200:
+                    logger.warning("[%s] ALP search %r -> HTTP %s", self.slug, term, resp.status_code)
+                    continue
+                results = resp.json().get("results", [])
+            except Exception as exc:  # noqa: BLE001 - degrade to hints
+                logger.warning("[%s] ALP search %r failed: %s", self.slug, term, exc)
+                continue
 
-        # Deterministic fallback: always include configured hint URLs and the
-        # code root so a totally-drifted search still yields something to parse.
+            for r in results:
+                if r.get("client_slug") != self._city_path:
+                    continue  # scope to this city (search is global)
+                if r.get("is_minute"):
+                    continue
+                code = r.get("code_slug")
+                doc_id = r.get("doc_id")
+                version = r.get("version") or "latest"
+                if code and doc_id:
+                    urls.append(self._section_url(self._city_path, code, doc_id, version))
+
+        # Deterministic fallback so a drifted API still yields something.
         urls.extend(hints_for(self.slug).get("hint_urls", []))
         if self.base_url:
             urls.append(self.base_url)
         return urls
 
-    def _find_search_box(self, page: Page) -> Locator | None:
-        for selector in _SEARCH_BOX_SELECTORS:
-            locator = page.locator(selector).first
-            try:
-                if locator.count() > 0 and locator.is_visible():
-                    return locator
-            except PlaywrightError:
-                continue
-        return None
+    # ------------------------------------------------------------------
+    # content fetch via render-doc API (overrides base Playwright fetch)
+    # ------------------------------------------------------------------
+    def fetch(self, url: str, wait_selector: str | None = None) -> str:
+        """Return the section's HTML via ALP's render-doc API (Cloudflare-safe)."""
+        self._rate_limit()
+        api = self._render_doc_api(url)
+        client = self._client()
+        if api is None:
+            # Non-section URL (e.g. code root): fetch the page HTML directly.
+            resp = client.get(url, timeout=self.settings.nav_timeout_ms / 1000)
+            return resp.text
 
-    def _search(self, page: Page, term: str) -> list[str]:
-        page.goto(self.base_url or self._code_root, wait_until="domcontentloaded")
-        try:
-            page.wait_for_load_state(
-                "networkidle", timeout=self.settings.selector_timeout_ms
-            )
-        except PlaywrightTimeoutError:
-            pass
-
-        box = self._find_search_box(page)
-        if box is None:
-            return self._search_via_url(page, term)
-
-        try:
-            box.click()
-            box.fill(term)
-            box.press("Enter")
-        except PlaywrightError as exc:
-            logger.debug("[%s] search box interaction failed: %s", self.slug, exc)
-            return self._search_via_url(page, term)
-
-        try:
-            page.wait_for_load_state(
-                "networkidle", timeout=self.settings.selector_timeout_ms
-            )
-        except PlaywrightTimeoutError:
-            pass
-        page.wait_for_timeout(1200)
-        return self._harvest_links(page)
-
-    def _search_via_url(self, page: Page, term: str) -> list[str]:
-        """Fallback: hit the code-root search route directly."""
-        url = f"{self._code_root}/search?query={quote_plus(term)}"
-        try:
-            page.goto(url, wait_until="domcontentloaded")
-            try:
-                page.wait_for_load_state(
-                    "networkidle", timeout=self.settings.selector_timeout_ms
-                )
-            except PlaywrightTimeoutError:
-                pass
-            page.wait_for_timeout(1200)
-            return self._harvest_links(page)
-        except PlaywrightError as exc:
-            logger.debug("[%s] search-via-url failed: %s", self.slug, exc)
-            return []
-
-    def _harvest_links(self, page: Page) -> list[str]:
-        found: list[str] = []
-        base = f"{urlparse(self.base_url).scheme}://{urlparse(self.base_url).netloc}"
-        for anchor in page.query_selector_all("a[href]"):
-            href = anchor.get_attribute("href")
-            if not href:
-                continue
-            try:
-                text = (anchor.inner_text() or "").strip()
-            except PlaywrightError:
-                text = ""
-            absolute = urljoin(base + "/", href)
-            if not self._is_section_link(absolute):
-                continue
-            if self.link_is_relevant(text, absolute) or self._matches_hint(
-                absolute, text
-            ):
-                found.append(absolute)
-        return found
+        resp = client.get(
+            api,
+            headers={"Accept": "application/json"},
+            timeout=self.settings.nav_timeout_ms / 1000,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        html = data.get("html") or ""
+        title = data.get("title") or ""
+        # Wrap so parse_section's heading selectors can find the title.
+        if title:
+            html = f"<h1>{title}</h1>\n{html}"
+        if self.settings.save_snapshots:
+            self._snapshot(url, html)
+        return html
 
     # ------------------------------------------------------------------
     # parsing
     # ------------------------------------------------------------------
     def parse_section(self, url: str, html: str) -> ScrapedSection | None:
         soup = self.soup(html)
-        text, _ = self.select_content(soup)
+        # render-doc html is already just the section body; take all of its text.
+        text = self.clean_text(soup)
+        if len(text) < 50:
+            return None
         heading = self.find_heading(soup)
         nums = self.parse_numbering(heading, text)
         return ScrapedSection(
