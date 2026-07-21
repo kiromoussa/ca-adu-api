@@ -144,16 +144,31 @@ def _extract_anthropic(raw_text: str, city_name: str, section_label: str) -> str
 # Azure OpenAI path
 # ---------------------------------------------------------------------------
 def _extract_azure(raw_text: str, city_name: str, section_label: str) -> str:
-    from openai import AzureOpenAI
+    endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
+    deployment = os.environ["AZURE_OPENAI_DEPLOYMENT"]
 
-    client = AzureOpenAI(
-        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-        api_key=os.environ["AZURE_OPENAI_API_KEY"],
-        api_version=AZURE_API_VERSION,
-    )
-    response = client.chat.completions.create(
-        model=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-        max_tokens=MAX_OUTPUT_TOKENS,
+    # Two Azure surfaces are supported:
+    #   - the newer OpenAI-compatible "v1" surface: endpoints ending in
+    #     /openai/v1 use the plain OpenAI client with base_url + bearer auth and
+    #     the deployment name as the model (this is what AI Foundry exposes).
+    #   - the classic surface: AzureOpenAI(azure_endpoint=..., api_version=...).
+    if "/openai/v1" in endpoint:
+        from openai import OpenAI
+
+        client = OpenAI(base_url=endpoint, api_key=os.environ["AZURE_OPENAI_API_KEY"])
+    else:
+        from openai import AzureOpenAI
+
+        client = AzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            api_version=AZURE_API_VERSION,
+        )
+
+    # gpt-5.x (and newer) require max_completion_tokens; gpt-4o accepts it too on
+    # current API versions. Fall back to max_tokens only if the model rejects it.
+    kwargs = dict(
+        model=deployment,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": _user_prompt(raw_text, city_name, section_label)},
@@ -167,6 +182,14 @@ def _extract_azure(raw_text: str, city_name: str, section_label: str) -> str:
             },
         },
     )
+    try:
+        response = client.chat.completions.create(
+            max_completion_tokens=MAX_OUTPUT_TOKENS, **kwargs
+        )
+    except Exception as exc:  # older models want max_tokens
+        if "max_completion_tokens" not in str(exc):
+            raise
+        response = client.chat.completions.create(max_tokens=MAX_OUTPUT_TOKENS, **kwargs)
     choice = response.choices[0]
     if getattr(choice.message, "refusal", None):
         raise ExtractionError(f"Azure model refused: {choice.message.refusal}")

@@ -74,8 +74,33 @@ LLM extractor. Two concrete issues, both known-hard anti-bot/SPA problems:
    matches the requested nodeId (wait for and read `#<nodeId>` / the matching
    `.chunk` container), not the first content wrapper.
 
-The 18 rows from the trial runs were mismatched to their nodes and were deleted
-so the DB is not misleading; `zoning_sections` and `adu_rules` are empty. No
-fabricated data was inserted. Hardening these two adapters (anti-bot for ALP,
-per-node chunk selection for Municode) is the next engineering task before real
-ADU rules can be populated and served.
+### Update - full pipeline proven live end to end (San Jose)
+
+The extraction pipeline now runs against the live system:
+
+- LLM: created a `gpt-5.4-mini` deployment on the Azure OpenAI resource
+  `kiromoussaai` (via `az`; no chat model had been deployed). `extract.py` was
+  updated to support the Azure OpenAI-compatible "v1" endpoint surface
+  (`/openai/v1`, `max_completion_tokens`) in addition to the classic surface.
+- San Jose: Playwright renders the real ADU chapter (Title 20, Ch 20.80 Part
+  2.75), the ADU section text is isolated, `gpt-5.4-mini` extracts structured
+  fields, `validate.py` flags them against the state-law baselines, and the rows
+  are upserted. `GET /v1/adu-rules?city=san_jose` now returns real, validated
+  data (e.g. side/rear setback 4 ft, owner-occupancy false, JADU allowed,
+  parking not required). This is genuine extracted ordinance data, not seeded.
+
+Remaining to reach full production quality/coverage (iterative, not blocking):
+
+1. ALP cities (LA, San Diego, SF, Sacramento): the headless browser still hits
+   Cloudflare's bot interstitial. Needs a stealth browser profile / clearance
+   handling or a residential proxy.
+2. Municode text isolation: currently a keyword-window slice of the rendered
+   page; scoping extraction to the exact `nodeId` chunk (or Municode's content
+   API, whose endpoint is not yet resolved) would improve precision.
+3. Extraction field mapping: the mini model occasionally maps a value to a
+   neighbouring field (e.g. the attached-height limit into the detached field);
+   a stronger model or few-shot examples tightens this. Rows the model is unsure
+   about are correctly flagged `needs_review`.
+
+No fabricated data was inserted at any point; empty/uncertain fields are null or
+`needs_review`.
