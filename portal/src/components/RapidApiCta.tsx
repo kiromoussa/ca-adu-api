@@ -7,17 +7,17 @@ interface RapidApiCtaProps {
 }
 
 export default function RapidApiCta({
-  label = "Get API key on RapidAPI",
+  label = "Get an API key",
   variant = "primary",
   className = "",
 }: RapidApiCtaProps) {
   const href = getRapidApiUrl();
   const base =
-    "inline-flex cursor-pointer items-center justify-center gap-2 rounded-md px-5 py-2.5 text-sm font-medium transition-colors";
+    "inline-flex cursor-pointer items-center justify-center gap-2 rounded-card px-5 py-2.5 text-sm font-semibold transition-transform duration-150 hover:-translate-y-px";
   const styles =
     variant === "primary"
-      ? "bg-ink text-white hover:bg-ink/85 dark:bg-white dark:text-ink dark:hover:bg-white/85"
-      : "border border-ink/15 text-ink hover:bg-ink/5 dark:border-white/20 dark:text-ink-dark dark:hover:bg-white/10";
+      ? "bg-accent text-white hover:bg-accent-deep"
+      : "border border-line-strong text-ink hover:border-accent hover:text-accent-deep";
 
   return (
     <a
@@ -27,7 +27,9 @@ export default function RapidApiCta({
       className={`${base} ${styles} ${className}`}
     >
       {label}
-      <span aria-hidden="true">-&gt;</span>
+      <span aria-hidden="true" className="font-mono">
+        -&gt;
+      </span>
     </a>
   );
 }

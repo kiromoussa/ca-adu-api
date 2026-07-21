@@ -67,20 +67,23 @@ export default async function ChangelogPage() {
 
   return (
     <div className="mx-auto max-w-content px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">Changelog</h1>
-      <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink/70 dark:text-ink-dark/70">
+      <p className="eyebrow">Changelog</p>
+      <h1 className="mt-3 text-3xl font-bold tracking-tightest sm:text-4xl">
+        What changed, by city.
+      </h1>
+      <p className="mt-4 max-w-measure leading-relaxed text-muted">
         Source re-ingestions, rule corrections, and coverage-status changes,
         pulled live from GET /v1/changelog.
       </p>
 
       {error && (
-        <div className="mt-8 rounded-lg border border-ink/10 bg-ink/[0.03] p-5 text-sm text-ink/70 dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-dark/70">
+        <div className="mt-8 rounded-card border border-line bg-surface p-5 text-sm text-muted">
           {error}
         </div>
       )}
 
       {!error && entries.length === 0 && (
-        <div className="mt-8 rounded-lg border border-ink/10 bg-ink/[0.03] p-5 text-sm text-ink/70 dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-dark/70">
+        <div className="mt-8 rounded-card border border-line bg-surface p-5 text-sm text-muted">
           No changelog entries yet.
         </div>
       )}
@@ -90,30 +93,30 @@ export default async function ChangelogPage() {
           {entries.map((entry, index) => (
             <li
               key={entry.id ?? index}
-              className="rounded-lg border border-ink/10 p-6 dark:border-white/10"
+              className="rounded-card border border-line bg-surface p-6"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-base font-semibold">
+                <h2 className="text-base font-semibold tracking-tightest">
                   {entry.title ?? "Update"}
                 </h2>
                 {entryDate(entry) && (
-                  <span className="text-xs text-ink/50 dark:text-ink-dark/50">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-faint">
                     {entryDate(entry)}
                   </span>
                 )}
               </div>
               {(entry.jurisdiction_name || entry.jurisdiction_slug) && (
-                <p className="mt-1 text-xs text-ink/50 dark:text-ink-dark/50">
+                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.06em] text-faint">
                   {entry.jurisdiction_name ?? entry.jurisdiction_slug}
                 </p>
               )}
               {(entry.summary || entry.description) && (
-                <p className="mt-3 text-sm leading-relaxed text-ink/70 dark:text-ink-dark/70">
+                <p className="mt-3 text-sm leading-relaxed text-muted">
                   {entry.summary ?? entry.description}
                 </p>
               )}
               {entry.category && (
-                <span className="mt-3 inline-block rounded-full border border-ink/10 px-3 py-1 text-xs text-ink/60 dark:border-white/15 dark:text-ink-dark/60">
+                <span className="mt-3 inline-block rounded-full border border-line bg-surface-2 px-3 py-1 font-mono text-[12px] text-muted">
                   {entry.category}
                 </span>
               )}

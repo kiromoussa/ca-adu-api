@@ -68,7 +68,7 @@ export function getRapidApiUrl(): string {
   return process.env.NEXT_PUBLIC_RAPIDAPI_URL ?? "https://rapidapi.com";
 }
 
-export const SITE_NAME = "ADU Atlas API";
+export const SITE_NAME = "Atlas Property Feasibility API";
 
 export const SITE_TAGLINE =
-  "Address-level ADU, JADU, and SB 9 feasibility - deterministic, source-cited, API-first.";
+  "The API for property feasibility. Deterministic, source-cited, address-level results - live today for California ADU, JADU, and SB 9.";

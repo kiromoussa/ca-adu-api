@@ -10,14 +10,14 @@ const UPDATED = "July 21, 2026";
 
 export default function TermsPage() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="font-mono text-xs uppercase tracking-widest text-teal-700">
+    <main className="mx-auto max-w-measure px-6 py-16">
+      <p className="eyebrow">
         Legal
       </p>
-      <h1 className="mt-3 text-3xl font-bold tracking-tight">Terms of Use</h1>
-      <p className="mt-2 text-sm text-neutral-500">Last updated: {UPDATED}</p>
+      <h1 className="mt-3 text-3xl font-bold tracking-tightest sm:text-4xl">Terms of Use</h1>
+      <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.06em] text-faint">Last updated: {UPDATED}</p>
 
-      <div className="mt-8 space-y-6 leading-relaxed text-neutral-700">
+      <div className="mt-8 space-y-7 leading-relaxed text-muted">
         <p>
           These Terms of Use govern access to and use of the Atlas Property
           Feasibility API and related documentation and developer portal (the
@@ -27,7 +27,7 @@ export default function TermsPage() {
         </p>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             1. What the Service is, and is not
           </h2>
           <p className="mt-2">
@@ -52,7 +52,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             2. No warranty
           </h2>
           <p className="mt-2">
@@ -67,7 +67,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             3. Limitation of liability
           </h2>
           <p className="mt-2">
@@ -83,7 +83,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             4. Acceptable use
           </h2>
           <p className="mt-2">
@@ -99,7 +99,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             5. Data sources and attribution
           </h2>
           <p className="mt-2">
@@ -114,7 +114,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             6. Billing and plans
           </h2>
           <p className="mt-2">
@@ -129,7 +129,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">
             7. Changes and termination
           </h2>
           <p className="mt-2">
@@ -142,14 +142,14 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight">8. Contact</h2>
+          <h2 className="text-lg font-semibold tracking-tightest text-ink">8. Contact</h2>
           <p className="mt-2">
             Questions about these terms can be sent through the support channel
             listed on the RapidAPI listing.
           </p>
         </section>
 
-        <p className="rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500">
+        <p className="rounded-card border border-line bg-surface p-4 text-sm text-faint">
           This document is a starting template provided for launch and is not
           legal advice. Have it reviewed by qualified counsel before relying on
           it in production, and align it with your RapidAPI provider agreement.

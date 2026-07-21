@@ -10,16 +10,18 @@ export const metadata: Metadata = {
 export default function DocsPage() {
   return (
     <div className="mx-auto max-w-content px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">API reference</h1>
-      <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink/70 dark:text-ink-dark/70">
-        Spec-first, OpenAPI 3.1. Every request and response schema below
-        matches the Pydantic models enforced on the server: strict field
-        types, an explicit feasibility_status enum, and provenance on every
-        substantive field. Authenticate with X-RapidAPI-Key and
-        X-RapidAPI-Host when calling through RapidAPI, or with x-api-key for
-        a direct integration.
+      <p className="eyebrow">Reference</p>
+      <h1 className="mt-3 text-3xl font-bold tracking-tightest sm:text-4xl">
+        API reference
+      </h1>
+      <p className="mt-4 max-w-measure leading-relaxed text-muted">
+        Spec-first, OpenAPI 3.1. Every request and response schema below matches
+        the Pydantic models enforced on the server: strict field types, an
+        explicit feasibility_status enum, and provenance on every substantive
+        field. Authenticate with X-RapidAPI-Key and X-RapidAPI-Host through
+        RapidAPI, or with x-api-key for a direct integration.
       </p>
-      <div className="mt-10">
+      <div className="mt-10 rounded-card border border-line bg-surface-2 p-2 sm:p-4">
         <SwaggerViewer />
       </div>
     </div>

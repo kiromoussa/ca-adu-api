@@ -1,102 +1,89 @@
 openapi: 3.1.0
 info:
   title: Atlas Property Feasibility API
-  version: "1.0.0"
-  summary: >-
-    The API for property feasibility. Deterministic, source-cited,
-    address-level results. Live now: California ADU, JADU, and SB 9. Expanding
-    to permits, environmental, historic, and coastal.
-  description: >
-    Atlas is a self-serve, developer-facing property feasibility API. Send an
-    address and a proposed project type and receive a fast, deterministic,
-    source-cited, timestamped PRELIMINARY feasibility result. Live coverage
-    today is California ADU, JADU, and SB 9 projects; permits, environmental,
-    historic, and coastal analysis are on the roadmap and are not yet returned.
-    Send an address and a proposed project type and receive a fast,
-    deterministic, source-cited, timestamped PRELIMINARY feasibility result:
-    parcel and zoning context, ADU / JADU / SB 9 rules, setback / height / size
-    constraints, hazard and overlay flags, assumptions, confidence, and
-    official-source citations.
+  version: 1.0.0
+  summary: 'The API for property feasibility. Deterministic, source-cited, address-level results. Live
+    now: California ADU, JADU, and SB 9. Expanding to permits, environmental, historic, and coastal.'
+  description: 'Atlas is a self-serve, developer-facing property feasibility API. Send an address and
+    a proposed project type and receive a fast, deterministic, source-cited, timestamped PRELIMINARY feasibility
+    result. Live coverage today is California ADU, JADU, and SB 9 projects; permits, environmental, historic,
+    and coastal analysis are on the roadmap and are not yet returned. Send an address and a proposed project
+    type and receive a fast, deterministic, source-cited, timestamped PRELIMINARY feasibility result:
+    parcel and zoning context, ADU / JADU / SB 9 rules, setback / height / size constraints, hazard and
+    overlay flags, assumptions, confidence, and official-source citations.
 
 
-    The request path is deterministic. It uses versioned structured rules,
-    PostGIS spatial joins, and source-linked data only. No large language model
-    is used at request time for any legal or geospatial determination. Every
-    substantive result field carries provenance (source URL, title, section or
-    layer, retrieved and last-verified timestamps, confidence, and data status).
+    The request path is deterministic. It uses versioned structured rules, PostGIS spatial joins, and
+    source-linked data only. No large language model is used at request time for any legal or geospatial
+    determination. Every substantive result field carries provenance (source URL, title, section or layer,
+    retrieved and last-verified timestamps, confidence, and data status).
 
 
-    This API never states that a permit is approved, that a project is legal to
-    build, that an outcome is guaranteed, or a final yes/no. It returns a
-    feasibility_status of likely_feasible, likely_constrained,
-    needs_professional_review, or insufficient_data, and includes a verbatim
-    disclaimer in every feasibility response.
+    This API never states that a permit is approved, that a project is legal to build, that an outcome
+    is guaranteed, or a final yes/no. It returns a feasibility_status of likely_feasible, likely_constrained,
+    needs_professional_review, or insufficient_data, and includes a verbatim disclaimer in every feasibility
+    response.
 
 
-    Coverage: Los Angeles City is the v1 target. Other California cities are
-    registered but return unsupported_coverage until their sources, GIS layers,
-    and rule sets are ingested, tested, and marked production-ready.
+    Coverage: Los Angeles City is the v1 target. Other California cities are registered but return unsupported_coverage
+    until their sources, GIS layers, and rule sets are ingested, tested, and marked production-ready.
+
+    '
   contact:
     name: ADU Atlas API Support
     url: https://aduatlas.example.com/support
   license:
     name: Proprietary
     url: https://aduatlas.example.com/terms
-  x-disclaimer: >-
-    This is preliminary informational zoning and GIS analysis, not legal,
-    architectural, surveying, engineering, title, environmental, or permit
-    advice. Verify all results with the applicable jurisdiction and qualified
-    professionals before making decisions or spending money.
-
+  x-disclaimer: This is preliminary informational zoning and GIS analysis, not legal, architectural, surveying,
+    engineering, title, environmental, or permit advice. Verify all results with the applicable jurisdiction
+    and qualified professionals before making decisions or spending money.
 servers:
-  - url: https://adu-atlas-api.onrender.com
-    description: Live production API (direct host).
-  - url: https://adu-atlas-api.p.rapidapi.com
-    description: RapidAPI gateway (set to your actual RapidAPI host after listing).
-
+- url: https://adu-atlas-api.onrender.com/v1
+  description: Live production API (direct host).
+- url: https://adu-atlas-api.p.rapidapi.com/v1
+  description: RapidAPI gateway (set to your actual RapidAPI host after listing).
 tags:
-  - name: feasibility
-    description: Address-level preliminary feasibility analysis.
-  - name: jurisdictions
-    description: Coverage and per-jurisdiction rule sets with citations.
-  - name: analyses
-    description: Retrieve a previously computed analysis.
-  - name: meta
-    description: Changelog and health.
-
-# Either the RapidAPI gateway headers OR the direct API key must be present.
+- name: feasibility
+  description: Address-level preliminary feasibility analysis.
+- name: jurisdictions
+  description: Coverage and per-jurisdiction rule sets with citations.
+- name: analyses
+  description: Retrieve a previously computed analysis.
+- name: meta
+  description: Changelog and health.
 security:
-  - rapidApiKey: []
-    rapidApiHost: []
-  - directApiKey: []
-
+- rapidApiKey: []
+  rapidApiHost: []
+- directApiKey: []
 paths:
-  /v1/feasibility:
+  /feasibility:
     post:
-      tags: [feasibility]
+      tags:
+      - feasibility
       operationId: createFeasibilityAnalysis
       summary: Run a preliminary feasibility analysis for one address and project type
-      description: >
-        Computes a deterministic, source-cited preliminary feasibility result
-        for a single address and a single project_type. This is the only
-        billable endpoint. A billable unit is one completed analysis that
-        resolves to a terminal feasibility_status. Errors, validation failures,
-        and unsupported-coverage responses are not billed. Identical inputs from
-        the same consumer within 24 hours are served from cache and not
-        double-billed. An Idempotency-Key may be supplied to safely retry.
+      description: 'Computes a deterministic, source-cited preliminary feasibility result for a single
+        address and a single project_type. This is the only billable endpoint. A billable unit is one
+        completed analysis that resolves to a terminal feasibility_status. Errors, validation failures,
+        and unsupported-coverage responses are not billed. Identical inputs from the same consumer within
+        24 hours are served from cache and not double-billed. An Idempotency-Key may be supplied to safely
+        retry.
+
+        '
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeasibilityRequest"
+              $ref: '#/components/schemas/FeasibilityRequest'
             examples:
               detachedAduLA:
                 summary: Detached ADU in Los Angeles
                 value:
-                  address: "1234 S Main St, Los Angeles, CA 90015"
+                  address: 1234 S Main St, Los Angeles, CA 90015
                   project_type: detached_adu
                   target_sqft: 800
                   bedrooms: 1
@@ -107,232 +94,219 @@ paths:
                   options:
                     near_transit: false
       responses:
-        "200":
-          description: >-
-            Completed feasibility analysis (billable). The feasibility_status is
-            terminal and the disclaimer is included verbatim.
+        '200':
+          description: Completed feasibility analysis (billable). The feasibility_status is terminal and
+            the disclaimer is included verbatim.
           headers:
             Idempotency-Key:
               description: Echo of the supplied idempotency key, if any.
               schema:
                 type: string
             X-Billable:
-              description: >-
-                "true" if this response was metered as a completed analysis,
-                "false" if served from the 24h dedupe cache.
+              description: '"true" if this response was metered as a completed analysis, "false" if served
+                from the 24h dedupe cache.'
               schema:
                 type: string
-                enum: ["true", "false"]
+                enum:
+                - 'true'
+                - 'false'
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FeasibilityResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          $ref: "#/components/responses/IdempotencyConflict"
-        "422":
-          $ref: "#/components/responses/UnsupportedCoverage"
-        "429":
-          $ref: "#/components/responses/QuotaExceeded"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /v1/jurisdictions:
+                $ref: '#/components/schemas/FeasibilityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/UnsupportedCoverage'
+        '429':
+          $ref: '#/components/responses/QuotaExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /jurisdictions:
     get:
-      tags: [jurisdictions]
+      tags:
+      - jurisdictions
       operationId: listJurisdictions
       summary: List jurisdictions and coverage status
-      description: >
-        Returns every registered jurisdiction with its coverage status,
-        supported project types, and the date its sources were last updated.
-        Read-only and not billed.
+      description: 'Returns every registered jurisdiction with its coverage status, supported project
+        types, and the date its sources were last updated. Read-only and not billed.
+
+        '
       responses:
-        "200":
+        '200':
           description: List of jurisdictions.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/JurisdictionList"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /v1/jurisdictions/{slug}/rules:
+                $ref: '#/components/schemas/JurisdictionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /jurisdictions/{slug}/rules:
     get:
-      tags: [jurisdictions]
+      tags:
+      - jurisdictions
       operationId: getJurisdictionRules
       summary: Get citywide and zone-level rules for a jurisdiction
-      description: >
-        Returns the citywide and zone-level rule set for a jurisdiction, each
-        rule attribute carrying per-field provenance and state-baseline
-        compliance flags, plus source citations and version history. Read-only
-        and not billed.
+      description: 'Returns the citywide and zone-level rule set for a jurisdiction, each rule attribute
+        carrying per-field provenance and state-baseline compliance flags, plus source citations and version
+        history. Read-only and not billed.
+
+        '
       parameters:
-        - $ref: "#/components/parameters/JurisdictionSlug"
-        - name: zone
-          in: query
-          required: false
-          description: Optional zone code filter (case-insensitive), e.g. R1, RD1.5.
-          schema:
-            type: string
-        - name: project_type
-          in: query
-          required: false
-          description: Optional project type filter.
-          schema:
-            $ref: "#/components/schemas/ProjectType"
+      - $ref: '#/components/parameters/JurisdictionSlug'
+      - name: zone
+        in: query
+        required: false
+        description: Optional zone code filter (case-insensitive), e.g. R1, RD1.5.
+        schema:
+          type: string
+      - name: project_type
+        in: query
+        required: false
+        description: Optional project type filter.
+        schema:
+          $ref: '#/components/schemas/ProjectType'
       responses:
-        "200":
+        '200':
           description: Rule set for the jurisdiction.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/JurisdictionRulesResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /v1/analyses/{analysis_id}:
+                $ref: '#/components/schemas/JurisdictionRulesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /analyses/{analysis_id}:
     get:
-      tags: [analyses]
+      tags:
+      - analyses
       operationId: getAnalysis
       summary: Retrieve a previously computed analysis
-      description: >
-        Retrieves a stored feasibility analysis by id. Private analyses require
-        the same API key or consumer that created them. A public shareable
-        analysis may instead be fetched with a share token via the `token` query
-        parameter. Read-only and not billed.
+      description: 'Retrieves a stored feasibility analysis by id. Private analyses require the same API
+        key or consumer that created them. A public shareable analysis may instead be fetched with a share
+        token via the `token` query parameter. Read-only and not billed.
+
+        '
       parameters:
-        - $ref: "#/components/parameters/AnalysisId"
-        - name: token
-          in: query
-          required: false
-          description: >-
-            Public share token for a shareable analysis. When supplied, the
-            analysis may be retrieved without the originating API key.
-          schema:
-            type: string
+      - $ref: '#/components/parameters/AnalysisId'
+      - name: token
+        in: query
+        required: false
+        description: Public share token for a shareable analysis. When supplied, the analysis may be retrieved
+          without the originating API key.
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: The stored analysis.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FeasibilityResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /v1/changelog:
+                $ref: '#/components/schemas/FeasibilityResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /changelog:
     get:
-      tags: [meta]
+      tags:
+      - meta
       operationId: getChangelog
       summary: Public update history by city
-      description: >
-        Returns the public update history: ingestion runs, rule-version changes,
-        and coverage changes, grouped by jurisdiction. Read-only and not billed.
+      description: 'Returns the public update history: ingestion runs, rule-version changes, and coverage
+        changes, grouped by jurisdiction. Read-only and not billed.
+
+        '
       parameters:
-        - name: jurisdiction
-          in: query
-          required: false
-          description: Optional jurisdiction slug filter.
-          schema:
-            type: string
-        - name: limit
-          in: query
-          required: false
-          description: Max entries to return (default 50, max 200).
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
+      - name: jurisdiction
+        in: query
+        required: false
+        description: Optional jurisdiction slug filter.
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        description: Max entries to return (default 50, max 200).
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
       responses:
-        "200":
+        '200':
           description: Changelog entries, newest first.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ChangelogResponse"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /v1/health:
+                $ref: '#/components/schemas/ChangelogResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /health:
     get:
-      tags: [meta]
+      tags:
+      - meta
       operationId: getHealth
       summary: Service health and non-sensitive source freshness
-      description: >
-        Returns service liveness, uptime, API and rules versions, and
-        non-sensitive freshness for each data source. No authentication required
-        and not billed.
+      description: 'Returns service liveness, uptime, API and rules versions, and non-sensitive freshness
+        for each data source. No authentication required and not billed.
+
+        '
       security: []
       responses:
-        "200":
+        '200':
           description: Service is healthy.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
-        "503":
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
           description: Service is degraded or a critical source is unavailable.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
-
+                $ref: '#/components/schemas/HealthResponse'
 components:
-  # -------------------------------------------------------------------------
-  # Security schemes
-  # -------------------------------------------------------------------------
   securitySchemes:
     rapidApiKey:
       type: apiKey
       in: header
       name: X-RapidAPI-Key
-      description: >-
-        Consumer key injected by the RapidAPI gateway. Present on every request
-        proxied through RapidAPI.
+      description: Consumer key injected by the RapidAPI gateway. Present on every request proxied through
+        RapidAPI.
     rapidApiHost:
       type: apiKey
       in: header
       name: X-RapidAPI-Host
-      description: >-
-        Expected gateway host header (aduatlas.p.rapidapi.com). Verified against
-        the expected gateway pattern; not used as a secret on its own.
+      description: Expected gateway host header (aduatlas.p.rapidapi.com). Verified against the expected
+        gateway pattern; not used as a secret on its own.
     directApiKey:
       type: apiKey
       in: header
       name: X-API-Key
-      description: >-
-        Direct (non-RapidAPI) API key. The raw key is sha256-hashed server-side
-        and matched against the stored key hash. Never send this together with
-        RapidAPI gateway headers.
-
-  # -------------------------------------------------------------------------
-  # Reusable parameters
-  # -------------------------------------------------------------------------
+      description: Direct (non-RapidAPI) API key. The raw key is sha256-hashed server-side and matched
+        against the stored key hash. Never send this together with RapidAPI gateway headers.
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
       required: false
-      description: >-
-        Optional client-generated key to make POST /v1/feasibility safe to
-        retry. A repeated key with an identical body returns the stored
-        response; a repeated key with a different body returns 409.
+      description: Optional client-generated key to make POST /v1/feasibility safe to retry. A repeated
+        key with an identical body returns the stored response; a repeated key with a different body returns
+        409.
       schema:
         type: string
         maxLength: 255
@@ -343,7 +317,8 @@ components:
       description: Jurisdiction slug, e.g. los_angeles.
       schema:
         type: string
-        examples: [los_angeles]
+        examples:
+        - los_angeles
     AnalysisId:
       name: analysis_id
       in: path
@@ -352,23 +327,19 @@ components:
       schema:
         type: string
         format: uuid
-
-  # -------------------------------------------------------------------------
-  # Reusable responses
-  # -------------------------------------------------------------------------
   responses:
     BadRequest:
       description: The request body or parameters were malformed. Not billed.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             invalidProjectType:
               value:
                 error:
                   code: validation_error
-                  message: "project_type must be one of the supported enum values."
+                  message: project_type must be one of the supported enum values.
                   details:
                     field: project_type
                   request_id: req_01HZY8Q9V0
@@ -377,76 +348,68 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             missing:
               value:
                 error:
                   code: unauthorized
-                  message: >-
-                    Missing API credentials. Provide RapidAPI gateway headers or
-                    the X-API-Key header.
+                  message: Missing API credentials. Provide RapidAPI gateway headers or the X-API-Key
+                    header.
                   request_id: req_01HZY8Q9V1
     Forbidden:
       description: The credentials are valid but not permitted to access this resource.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             privateAnalysis:
               value:
                 error:
                   code: forbidden
-                  message: "This analysis is private to another consumer."
+                  message: This analysis is private to another consumer.
                   request_id: req_01HZY8Q9V2
     NotFound:
       description: The requested resource does not exist.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             unknownJurisdiction:
               value:
                 error:
                   code: not_found
-                  message: "No jurisdiction with slug 'fresno'."
+                  message: No jurisdiction with slug 'fresno'.
                   request_id: req_01HZY8Q9V3
     IdempotencyConflict:
-      description: >-
-        The Idempotency-Key was reused with a different request body. Not billed.
+      description: The Idempotency-Key was reused with a different request body. Not billed.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             conflict:
               value:
                 error:
                   code: idempotency_key_conflict
-                  message: >-
-                    This Idempotency-Key was already used with a different
-                    request body.
+                  message: This Idempotency-Key was already used with a different request body.
                   request_id: req_01HZY8Q9V4
     UnsupportedCoverage:
-      description: >-
-        The address resolved to a jurisdiction whose coverage_status is not
-        production. No feasibility determination is made and the request is NOT
-        billed.
+      description: The address resolved to a jurisdiction whose coverage_status is not production. No
+        feasibility determination is made and the request is NOT billed.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             planned:
               value:
                 error:
                   code: unsupported_coverage
-                  message: >-
-                    The city of Oakland is registered but not yet production
-                    (coverage_status=planned). No feasibility result is
-                    available and you were not billed.
+                  message: The city of Oakland is registered but not yet production (coverage_status=planned).
+                    No feasibility result is available and you were not billed.
                   details:
                     jurisdiction_slug: oakland
                     coverage_status: planned
@@ -456,15 +419,14 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             basic:
               value:
                 error:
                   code: quota_exceeded
-                  message: >-
-                    Monthly quota exceeded for your plan. Upgrade or wait for the
-                    next billing cycle. There are no paid overages in v1.
+                  message: Monthly quota exceeded for your plan. Upgrade or wait for the next billing
+                    cycle. There are no paid overages in v1.
                   details:
                     plan: BASIC
                     monthly_quota: 3
@@ -475,289 +437,362 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
           examples:
             failure:
               value:
                 error:
                   code: internal_error
-                  message: "An unexpected error occurred. Please retry."
+                  message: An unexpected error occurred. Please retry.
                   request_id: req_01HZY8Q9V7
-
-  # -------------------------------------------------------------------------
-  # Schemas
-  # -------------------------------------------------------------------------
   schemas:
-
-    # ---- Enums ----
     ProjectType:
       type: string
       description: Proposed project type.
       enum:
-        - detached_adu
-        - attached_adu
-        - garage_conversion
-        - jadu
-        - sb9_duplex
-        - sb9_urban_lot_split
-
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
     FeasibilityStatus:
       type: string
-      description: >-
-        Terminal preliminary feasibility status. Never an approval or a legal
-        yes/no.
+      description: Terminal preliminary feasibility status. Never an approval or a legal yes/no.
       enum:
-        - likely_feasible
-        - likely_constrained
-        - needs_professional_review
-        - insufficient_data
-
+      - likely_feasible
+      - likely_constrained
+      - needs_professional_review
+      - insufficient_data
     PathStatus:
       type: string
       description: Status of a specific development path for this parcel.
       enum:
-        - likely_eligible
-        - likely_ineligible
-        - conditional
-        - needs_professional_review
-        - insufficient_data
-
+      - likely_eligible
+      - likely_ineligible
+      - conditional
+      - needs_professional_review
+      - insufficient_data
     ConfidenceLevel:
       type: string
-      enum: [high, medium, low]
+      enum:
+      - high
+      - medium
+      - low
       description: Confidence in the value backing this field.
-
     DataStatus:
       type: string
-      enum: [current, stale, needs_review, unavailable]
+      enum:
+      - current
+      - stale
+      - needs_review
+      - unavailable
       description: Freshness/verification status of the backing source data.
-
     ComplianceFlag:
       type: string
-      description: >-
-        Result of validating a local value against the current California state
-        baseline. Local values more restrictive than the state baseline are
-        flagged, never silently discarded.
+      description: Result of validating a local value against the current California state baseline. Local
+        values more restrictive than the state baseline are flagged, never silently discarded.
       enum:
-        - compliant
-        - needs_review
-        - possibly_more_restrictive_than_state_baseline
-
+      - compliant
+      - needs_review
+      - possibly_more_restrictive_than_state_baseline
     CoverageStatus:
       type: string
-      enum: [planned, ingesting, production]
-      description: >-
-        Coverage maturity. Only `production` jurisdictions return billable
-        feasibility results.
-
+      enum:
+      - planned
+      - ingesting
+      - production
+      description: Coverage maturity. Only `production` jurisdictions return billable feasibility results.
     OverlayType:
       type: string
-      enum: [flood, fire, historic, coastal, hillside, environmental, hpoz, other]
-
-    # ---- Provenance ----
+      enum:
+      - flood
+      - fire
+      - historic
+      - coastal
+      - hillside
+      - environmental
+      - hpoz
+      - other
     Provenance:
       type: object
-      description: >-
-        Source provenance carried by every substantive result field. Present
-        wherever a value is asserted.
+      description: Source provenance carried by every substantive result field. Present wherever a value
+        is asserted.
       required:
-        - source_url
-        - source_title
-        - retrieved_at
-        - confidence
-        - data_status
+      - source_url
+      - source_title
+      - retrieved_at
+      - confidence
+      - data_status
       properties:
         source_url:
           type: string
           format: uri
           description: Canonical URL of the source document, code section, or GIS service.
-          examples: ["https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer"]
+          examples:
+          - https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer
         source_title:
           type: string
           description: Human-readable title of the source.
-          examples: ["LA City ZIMAS zoning districts"]
+          examples:
+          - LA City ZIMAS zoning districts
         source_section:
-          type: [string, "null"]
-          description: >-
-            Code section identifier when the source is a municipal code (e.g.
-            "LAMC 12.22 A.33"). Null for GIS sources.
+          type:
+          - string
+          - 'null'
+          description: Code section identifier when the source is a municipal code (e.g. "LAMC 12.22 A.33").
+            Null for GIS sources.
         source_layer:
-          type: [string, "null"]
-          description: >-
-            GIS layer/table identifier when the source is a spatial service
-            (e.g. "NFHL/MapServer/28"). Null for document sources.
+          type:
+          - string
+          - 'null'
+          description: GIS layer/table identifier when the source is a spatial service (e.g. "NFHL/MapServer/28").
+            Null for document sources.
         retrieved_at:
           type: string
           format: date-time
           description: When the source content was retrieved and snapshotted.
         last_verified_at:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           format: date-time
           description: When the value was last verified against the source.
         confidence:
-          $ref: "#/components/schemas/ConfidenceLevel"
+          $ref: '#/components/schemas/ConfidenceLevel'
         data_status:
-          $ref: "#/components/schemas/DataStatus"
+          $ref: '#/components/schemas/DataStatus'
         snapshot_hash:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           description: Content hash of the immutable source snapshot this value came from.
-
-    # ---- Sourced value wrappers (value + provenance + optional compliance) ----
     SourcedNumber:
       type: object
-      required: [value, provenance]
+      required:
+      - value
+      - provenance
       properties:
         value:
-          type: [number, "null"]
+          type:
+          - number
+          - 'null'
         unit:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           description: Unit of the value, e.g. ft, sqft, days.
-          examples: [ft]
+          examples:
+          - ft
         provenance:
-          $ref: "#/components/schemas/Provenance"
+          $ref: '#/components/schemas/Provenance'
         state_baseline:
-          type: [number, "null"]
+          type:
+          - number
+          - 'null'
           description: The applicable California state baseline value for comparison.
         compliance_flag:
-          $ref: "#/components/schemas/ComplianceFlag"
+          $ref: '#/components/schemas/ComplianceFlag'
         note:
-          type: [string, "null"]
-
+          type:
+          - string
+          - 'null'
     SourcedBoolean:
       type: object
-      required: [value, provenance]
+      required:
+      - value
+      - provenance
       properties:
         value:
-          type: [boolean, "null"]
+          type:
+          - boolean
+          - 'null'
         provenance:
-          $ref: "#/components/schemas/Provenance"
+          $ref: '#/components/schemas/Provenance'
         state_baseline:
-          type: [boolean, "null"]
+          type:
+          - boolean
+          - 'null'
         compliance_flag:
-          $ref: "#/components/schemas/ComplianceFlag"
+          $ref: '#/components/schemas/ComplianceFlag'
         note:
-          type: [string, "null"]
-
+          type:
+          - string
+          - 'null'
     SourcedString:
       type: object
-      required: [value, provenance]
+      required:
+      - value
+      - provenance
       properties:
         value:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         provenance:
-          $ref: "#/components/schemas/Provenance"
+          $ref: '#/components/schemas/Provenance'
         note:
-          type: [string, "null"]
-
-    # ---- Request ----
+          type:
+          - string
+          - 'null'
     FeasibilityRequest:
       type: object
-      required: [address, project_type]
+      required:
+      - address
+      - project_type
       additionalProperties: false
       properties:
         address:
           type: string
           minLength: 5
           description: Free-form street address to analyze.
-          examples: ["1234 S Main St, Los Angeles, CA 90015"]
+          examples:
+          - 1234 S Main St, Los Angeles, CA 90015
         project_type:
-          $ref: "#/components/schemas/ProjectType"
+          $ref: '#/components/schemas/ProjectType'
         target_sqft:
-          type: [number, "null"]
+          type:
+          - number
+          - 'null'
           minimum: 0
           description: Proposed conditioned floor area in square feet.
         bedrooms:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
           minimum: 0
           description: Proposed number of bedrooms.
         proposed_height_ft:
-          type: [number, "null"]
+          type:
+          - number
+          - 'null'
           minimum: 0
           description: Proposed structure height in feet.
         existing_structure:
-          type: [object, "null"]
+          type:
+          - object
+          - 'null'
           description: Optional context about the existing structure on the parcel.
           properties:
             type:
-              type: [string, "null"]
-              enum: [single_family, multifamily, none, unknown, null]
+              type:
+              - string
+              - 'null'
+              enum:
+              - single_family
+              - multifamily
+              - none
+              - unknown
+              - null
             has_garage:
-              type: [boolean, "null"]
+              type:
+              - boolean
+              - 'null'
             year_built:
-              type: [integer, "null"]
+              type:
+              - integer
+              - 'null'
           additionalProperties: false
         options:
-          type: [object, "null"]
+          type:
+          - object
+          - 'null'
           description: Optional flags that influence which state provisions apply.
           properties:
             near_transit:
-              type: [boolean, "null"]
+              type:
+              - boolean
+              - 'null'
               description: Caller-asserted transit proximity hint (verified where possible).
             historic_property:
-              type: [boolean, "null"]
+              type:
+              - boolean
+              - 'null'
             include_envelope:
-              type: [boolean, "null"]
+              type:
+              - boolean
+              - 'null'
               description: Request an approximate conceptual envelope (LA v1 only).
           additionalProperties: false
-
-    # ---- Response building blocks ----
     RequestSummary:
       type: object
       description: Echo of the normalized request.
-      required: [address, project_type]
+      required:
+      - address
+      - project_type
       properties:
         address:
           type: string
         normalized_address:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         project_type:
-          $ref: "#/components/schemas/ProjectType"
+          $ref: '#/components/schemas/ProjectType'
         target_sqft:
-          type: [number, "null"]
+          type:
+          - number
+          - 'null'
         bedrooms:
-          type: [integer, "null"]
+          type:
+          - integer
+          - 'null'
         proposed_height_ft:
-          type: [number, "null"]
-
+          type:
+          - number
+          - 'null'
     CoverageContext:
       type: object
-      required: [jurisdiction_slug, jurisdiction_name, coverage_status]
+      required:
+      - jurisdiction_slug
+      - jurisdiction_name
+      - coverage_status
       properties:
         jurisdiction_slug:
           type: string
-          examples: [los_angeles]
+          examples:
+          - los_angeles
         jurisdiction_name:
           type: string
-          examples: ["City of Los Angeles"]
+          examples:
+          - City of Los Angeles
         coverage_status:
-          $ref: "#/components/schemas/CoverageStatus"
+          $ref: '#/components/schemas/CoverageStatus'
         matched_confidence:
-          $ref: "#/components/schemas/ConfidenceLevel"
+          $ref: '#/components/schemas/ConfidenceLevel'
         provenance:
-          $ref: "#/components/schemas/Provenance"
-
+          $ref: '#/components/schemas/Provenance'
     ParcelContext:
       type: object
-      description: >-
-        Parcel context. Only fields actually found are populated. A parcel match
-        is never approximated as exact.
+      description: Parcel context. Only fields actually found are populated. A parcel match is never approximated
+        as exact.
       properties:
         apn:
-          $ref: "#/components/schemas/SourcedString"
+          $ref: '#/components/schemas/SourcedString'
         matched:
           type: boolean
           description: Whether a parcel was matched spatially.
         match_method:
-          type: [string, "null"]
-          enum: [st_contains, st_intersects, geocode_point, null]
+          type:
+          - string
+          - 'null'
+          enum:
+          - st_contains
+          - st_intersects
+          - geocode_point
+          - null
           description: Spatial predicate used to match the parcel.
         match_tolerance_m:
-          type: [number, "null"]
+          type:
+          - number
+          - 'null'
           description: Documented spatial tolerance in meters.
         lot_size_sqft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         centroid:
-          type: [object, "null"]
+          type:
+          - object
+          - 'null'
           description: Parcel centroid as [lon, lat] (WGS84).
           properties:
             lon:
@@ -765,105 +800,111 @@ components:
             lat:
               type: number
           additionalProperties: false
-
     ZoningContext:
       type: object
       description: Zoning context from a spatial join of the parcel/centroid.
       properties:
         zone_code:
-          $ref: "#/components/schemas/SourcedString"
+          $ref: '#/components/schemas/SourcedString'
         zone_name:
-          $ref: "#/components/schemas/SourcedString"
+          $ref: '#/components/schemas/SourcedString'
         cross_zone_ambiguity:
           type: boolean
           description: True if the parcel intersects more than one zoning district.
         general_plan:
-          $ref: "#/components/schemas/SourcedString"
-
+          $ref: '#/components/schemas/SourcedString'
     EligiblePath:
       type: object
-      required: [path_type, status]
+      required:
+      - path_type
+      - status
       properties:
         path_type:
-          $ref: "#/components/schemas/ProjectType"
+          $ref: '#/components/schemas/ProjectType'
         status:
-          $ref: "#/components/schemas/PathStatus"
+          $ref: '#/components/schemas/PathStatus'
         reason:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           description: Plain-language, condition-by-condition explanation.
         sources:
           type: array
           items:
-            $ref: "#/components/schemas/Provenance"
-
+            $ref: '#/components/schemas/Provenance'
     DevelopmentConstraints:
       type: object
-      description: >-
-        Per-field development constraints. Each field pairs the applicable value
-        with provenance and a state-baseline compliance flag. Fields that could
-        not be resolved are omitted or carry a null value with data_status.
+      description: Per-field development constraints. Each field pairs the applicable value with provenance
+        and a state-baseline compliance flag. Fields that could not be resolved are omitted or carry a
+        null value with data_status.
       properties:
         max_height_ft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         max_size_sqft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         side_setback_ft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         rear_setback_ft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         front_setback_ft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         parking_required:
-          $ref: "#/components/schemas/SourcedBoolean"
+          $ref: '#/components/schemas/SourcedBoolean'
         owner_occupancy_required:
-          $ref: "#/components/schemas/SourcedBoolean"
+          $ref: '#/components/schemas/SourcedBoolean'
         permit_review_days:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         impact_fee_exempt_sqft_threshold:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         fire_sprinkler_required:
-          $ref: "#/components/schemas/SourcedBoolean"
-
+          $ref: '#/components/schemas/SourcedBoolean'
     OverlayFinding:
       type: object
-      required: [overlay_type, status]
-      description: >-
-        Result of intersecting the parcel with an overlay/hazard layer. A "no
-        hit" is explicitly distinguished from "source unavailable".
+      required:
+      - overlay_type
+      - status
+      description: Result of intersecting the parcel with an overlay/hazard layer. A "no hit" is explicitly
+        distinguished from "source unavailable".
       properties:
         overlay_type:
-          $ref: "#/components/schemas/OverlayType"
+          $ref: '#/components/schemas/OverlayType'
         status:
           type: string
-          enum: [hit, no_hit, source_unavailable]
+          enum:
+          - hit
+          - no_hit
+          - source_unavailable
         raw_values:
-          type: [object, "null"]
+          type:
+          - object
+          - 'null'
           description: Raw source attribute values preserved verbatim (ids, zone codes).
           additionalProperties: true
         description:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         provenance:
-          $ref: "#/components/schemas/Provenance"
-
+          $ref: '#/components/schemas/Provenance'
     ApproximateEnvelope:
       type: object
-      description: >-
-        Approximate conceptual buildable envelope. Available for Los Angeles v1
-        only. Explicitly labeled approximate. If parcel orientation
-        (front/side/rear) is unknown, this is downgraded to a limitation rather
-        than reporting false precision. Never asserts easements, slopes,
-        utilities, trees, HOA, title, or survey facts.
+      description: Approximate conceptual buildable envelope. Available for Los Angeles v1 only. Explicitly
+        labeled approximate. If parcel orientation (front/side/rear) is unknown, this is downgraded to
+        a limitation rather than reporting false precision. Never asserts easements, slopes, utilities,
+        trees, HOA, title, or survey facts.
       properties:
         available:
           type: boolean
           description: False when the envelope could not be computed for this parcel.
         label:
           type: string
-          default: "approximate conceptual envelope"
+          default: approximate conceptual envelope
         buildable_area_sqft:
-          $ref: "#/components/schemas/SourcedNumber"
+          $ref: '#/components/schemas/SourcedNumber'
         method:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           description: Description of the PostGIS buffering method used.
         assumptions:
           type: array
@@ -873,54 +914,69 @@ components:
           type: array
           items:
             type: string
-
     Assumption:
       type: object
-      required: [text]
+      required:
+      - text
       properties:
         text:
           type: string
         provenance:
-          type: [object, "null"]
+          type:
+          - object
+          - 'null'
           allOf:
-            - $ref: "#/components/schemas/Provenance"
-
+          - $ref: '#/components/schemas/Provenance'
     Limitation:
       type: object
-      required: [text]
+      required:
+      - text
       properties:
         code:
-          type: [string, "null"]
-          examples: [orientation_unknown, source_unavailable]
+          type:
+          - string
+          - 'null'
+          examples:
+          - orientation_unknown
+          - source_unavailable
         text:
           type: string
-
     Freshness:
       type: object
       description: Analysis versioning and data freshness.
-      required: [analysis_version, generated_at]
+      required:
+      - analysis_version
+      - generated_at
       properties:
         analysis_version:
           type: string
           description: Version of the analysis engine.
-          examples: ["1.0.0"]
+          examples:
+          - 1.0.0
         rules_version:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           description: Version of the rule set applied.
         state_baseline_version:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         generated_at:
           type: string
           format: date-time
         data_as_of:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           format: date-time
           description: Newest last_verified_at across the sources used.
-
     ScoreBlock:
       type: object
       description: Optional explainable score. Omitted entirely when not explainable.
-      required: [value, explanation]
+      required:
+      - value
+      - explanation
       properties:
         value:
           type: number
@@ -928,160 +984,193 @@ components:
           maximum: 100
         explanation:
           type: string
-
-    # ---- Feasibility response ----
     FeasibilityResponse:
       type: object
       required:
-        - analysis_id
-        - request
-        - coverage
-        - feasibility_status
-        - sources
-        - freshness
-        - disclaimer
+      - analysis_id
+      - request
+      - coverage
+      - feasibility_status
+      - sources
+      - freshness
+      - disclaimer
       properties:
         analysis_id:
           type: string
           format: uuid
         request:
-          $ref: "#/components/schemas/RequestSummary"
+          $ref: '#/components/schemas/RequestSummary'
         coverage:
-          $ref: "#/components/schemas/CoverageContext"
+          $ref: '#/components/schemas/CoverageContext'
         parcel:
-          $ref: "#/components/schemas/ParcelContext"
+          $ref: '#/components/schemas/ParcelContext'
         zoning:
-          $ref: "#/components/schemas/ZoningContext"
+          $ref: '#/components/schemas/ZoningContext'
         feasibility_status:
-          $ref: "#/components/schemas/FeasibilityStatus"
+          $ref: '#/components/schemas/FeasibilityStatus'
         score:
-          $ref: "#/components/schemas/ScoreBlock"
+          $ref: '#/components/schemas/ScoreBlock'
         eligible_paths:
           type: array
           items:
-            $ref: "#/components/schemas/EligiblePath"
+            $ref: '#/components/schemas/EligiblePath'
         development_constraints:
-          $ref: "#/components/schemas/DevelopmentConstraints"
+          $ref: '#/components/schemas/DevelopmentConstraints'
         overlay_findings:
           type: array
           items:
-            $ref: "#/components/schemas/OverlayFinding"
+            $ref: '#/components/schemas/OverlayFinding'
         approximate_envelope:
-          $ref: "#/components/schemas/ApproximateEnvelope"
+          $ref: '#/components/schemas/ApproximateEnvelope'
         assumptions:
           type: array
           items:
-            $ref: "#/components/schemas/Assumption"
+            $ref: '#/components/schemas/Assumption'
         limitations:
           type: array
           items:
-            $ref: "#/components/schemas/Limitation"
+            $ref: '#/components/schemas/Limitation'
         sources:
           type: array
           description: All distinct sources used, for top-level citation.
           items:
-            $ref: "#/components/schemas/Provenance"
+            $ref: '#/components/schemas/Provenance'
         freshness:
-          $ref: "#/components/schemas/Freshness"
+          $ref: '#/components/schemas/Freshness'
         share_token:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           description: Present when a public shareable token has been minted.
         disclaimer:
           type: string
-          const: >-
-            This is preliminary informational zoning and GIS analysis, not
-            legal, architectural, surveying, engineering, title, environmental,
-            or permit advice. Verify all results with the applicable
-            jurisdiction and qualified professionals before making decisions or
-            spending money.
-
-    # ---- Jurisdictions ----
+          const: This is preliminary informational zoning and GIS analysis, not legal, architectural,
+            surveying, engineering, title, environmental, or permit advice. Verify all results with the
+            applicable jurisdiction and qualified professionals before making decisions or spending money.
     Jurisdiction:
       type: object
-      required: [slug, name, coverage_status, supported_project_types]
+      required:
+      - slug
+      - name
+      - coverage_status
+      - supported_project_types
       properties:
         slug:
           type: string
-          examples: [los_angeles]
+          examples:
+          - los_angeles
         name:
           type: string
-          examples: [Los Angeles]
+          examples:
+          - Los Angeles
         display_name:
           type: string
-          examples: ["City of Los Angeles"]
+          examples:
+          - City of Los Angeles
         state:
           type: string
-          examples: [CA]
+          examples:
+          - CA
         county:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         publisher_type:
-          type: [string, "null"]
-          enum: [american_legal, municode, null]
+          type:
+          - string
+          - 'null'
+          enum:
+          - american_legal
+          - municode
+          - null
         official_code_url:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           format: uri
         coverage_status:
-          $ref: "#/components/schemas/CoverageStatus"
+          $ref: '#/components/schemas/CoverageStatus'
         supported_project_types:
           type: array
           items:
-            $ref: "#/components/schemas/ProjectType"
+            $ref: '#/components/schemas/ProjectType'
         sources_last_updated_at:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           format: date-time
-
     JurisdictionList:
       type: object
-      required: [data, count]
+      required:
+      - data
+      - count
       properties:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/Jurisdiction"
+            $ref: '#/components/schemas/Jurisdiction'
         count:
           type: integer
-          examples: [8]
-
+          examples:
+          - 8
     RuleAttribute:
       type: object
       description: A single rule attribute with per-field provenance and compliance.
-      required: [key, provenance]
+      required:
+      - key
+      - provenance
       properties:
         key:
           type: string
-          examples: [max_height_detached_standard_ft]
+          examples:
+          - max_height_detached_standard_ft
         value:
           description: Value of any JSON type (number, boolean, string, or null).
-          type: [number, boolean, string, "null"]
+          type:
+          - number
+          - boolean
+          - string
+          - 'null'
         unit:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         state_baseline:
           description: Applicable state baseline for comparison.
-          type: [number, boolean, string, "null"]
+          type:
+          - number
+          - boolean
+          - string
+          - 'null'
         compliance_flag:
-          $ref: "#/components/schemas/ComplianceFlag"
+          $ref: '#/components/schemas/ComplianceFlag'
         provenance:
-          $ref: "#/components/schemas/Provenance"
-
+          $ref: '#/components/schemas/Provenance'
     ZoneRuleSet:
       type: object
-      required: [zone_code, attributes]
+      required:
+      - zone_code
+      - attributes
       properties:
         zone_code:
           type: string
-          examples: [R1]
+          examples:
+          - R1
         zone_name:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         project_type:
-          $ref: "#/components/schemas/ProjectType"
+          $ref: '#/components/schemas/ProjectType'
         attributes:
           type: array
           items:
-            $ref: "#/components/schemas/RuleAttribute"
-
+            $ref: '#/components/schemas/RuleAttribute'
     RuleVersion:
       type: object
-      required: [version, effective_at]
+      required:
+      - version
+      - effective_at
       properties:
         version:
           type: string
@@ -1089,38 +1178,46 @@ components:
           type: string
           format: date-time
         change_summary:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         source:
-          $ref: "#/components/schemas/Provenance"
-
+          $ref: '#/components/schemas/Provenance'
     JurisdictionRulesResponse:
       type: object
-      required: [jurisdiction, citywide, zones, citations]
+      required:
+      - jurisdiction
+      - citywide
+      - zones
+      - citations
       properties:
         jurisdiction:
-          $ref: "#/components/schemas/Jurisdiction"
+          $ref: '#/components/schemas/Jurisdiction'
         citywide:
           type: array
           description: Citywide rule attributes not specific to a zone.
           items:
-            $ref: "#/components/schemas/RuleAttribute"
+            $ref: '#/components/schemas/RuleAttribute'
         zones:
           type: array
           items:
-            $ref: "#/components/schemas/ZoneRuleSet"
+            $ref: '#/components/schemas/ZoneRuleSet'
         citations:
           type: array
           items:
-            $ref: "#/components/schemas/Provenance"
+            $ref: '#/components/schemas/Provenance'
         version_history:
           type: array
           items:
-            $ref: "#/components/schemas/RuleVersion"
-
-    # ---- Changelog ----
+            $ref: '#/components/schemas/RuleVersion'
     ChangelogEntry:
       type: object
-      required: [id, jurisdiction_slug, change_type, occurred_at, summary]
+      required:
+      - id
+      - jurisdiction_slug
+      - change_type
+      - occurred_at
+      - summary
       properties:
         id:
           type: string
@@ -1130,95 +1227,115 @@ components:
         change_type:
           type: string
           enum:
-            - coverage_change
-            - rule_update
-            - source_ingested
-            - source_refreshed
-            - correction
+          - coverage_change
+          - rule_update
+          - source_ingested
+          - source_refreshed
+          - correction
         summary:
           type: string
         occurred_at:
           type: string
           format: date-time
         source:
-          type: [object, "null"]
+          type:
+          - object
+          - 'null'
           allOf:
-            - $ref: "#/components/schemas/Provenance"
-
+          - $ref: '#/components/schemas/Provenance'
     ChangelogResponse:
       type: object
-      required: [data, count]
+      required:
+      - data
+      - count
       properties:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/ChangelogEntry"
+            $ref: '#/components/schemas/ChangelogEntry'
         count:
           type: integer
-
-    # ---- Health ----
     SourceFreshness:
       type: object
-      required: [key, data_status]
+      required:
+      - key
+      - data_status
       properties:
         key:
           type: string
-          examples: [la_zimas_zoning]
+          examples:
+          - la_zimas_zoning
         name:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         data_status:
-          $ref: "#/components/schemas/DataStatus"
+          $ref: '#/components/schemas/DataStatus'
         last_refreshed_at:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
           format: date-time
-
     HealthResponse:
       type: object
-      required: [status, uptime_seconds, api_version]
+      required:
+      - status
+      - uptime_seconds
+      - api_version
       properties:
         status:
           type: string
-          enum: [ok, degraded]
+          enum:
+          - ok
+          - degraded
         uptime_seconds:
           type: number
         api_version:
           type: string
-          examples: ["1.0.0"]
+          examples:
+          - 1.0.0
         rules_version:
-          type: [string, "null"]
+          type:
+          - string
+          - 'null'
         sources:
           type: array
           items:
-            $ref: "#/components/schemas/SourceFreshness"
-
-    # ---- Error envelope ----
+            $ref: '#/components/schemas/SourceFreshness'
     ErrorEnvelope:
       type: object
-      required: [error]
+      required:
+      - error
       description: Consistent error envelope for every non-2xx response.
       properties:
         error:
           type: object
-          required: [code, message]
+          required:
+          - code
+          - message
           properties:
             code:
               type: string
               enum:
-                - validation_error
-                - unauthorized
-                - forbidden
-                - not_found
-                - idempotency_key_conflict
-                - unsupported_coverage
-                - quota_exceeded
-                - rate_limited
-                - internal_error
+              - validation_error
+              - unauthorized
+              - forbidden
+              - not_found
+              - idempotency_key_conflict
+              - unsupported_coverage
+              - quota_exceeded
+              - rate_limited
+              - internal_error
             message:
               type: string
               description: Human-readable message. Never leaks internal detail.
             details:
-              type: [object, "null"]
+              type:
+              - object
+              - 'null'
               additionalProperties: true
             request_id:
-              type: [string, "null"]
+              type:
+              - string
+              - 'null'
               description: Correlation id for support.

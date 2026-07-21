@@ -37,9 +37,9 @@ info:
     engineering, title, environmental, or permit advice. Verify all results with the applicable jurisdiction
     and qualified professionals before making decisions or spending money.
 servers:
-- url: https://adu-atlas-api.onrender.com
+- url: https://adu-atlas-api.onrender.com/v1
   description: Live production API (direct host).
-- url: https://adu-atlas-api.p.rapidapi.com
+- url: https://adu-atlas-api.p.rapidapi.com/v1
   description: RapidAPI gateway (set to your actual RapidAPI host after listing).
 tags:
 - name: feasibility
@@ -55,7 +55,7 @@ security:
   rapidApiHost: []
 - directApiKey: []
 paths:
-  /v1/feasibility:
+  /feasibility:
     post:
       tags:
       - feasibility
@@ -124,7 +124,7 @@ paths:
           $ref: '#/components/responses/QuotaExceeded'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/jurisdictions:
+  /jurisdictions:
     get:
       tags:
       - jurisdictions
@@ -145,7 +145,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/jurisdictions/{slug}/rules:
+  /jurisdictions/{slug}/rules:
     get:
       tags:
       - jurisdictions
@@ -183,7 +183,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/analyses/{analysis_id}:
+  /analyses/{analysis_id}:
     get:
       tags:
       - analyses
@@ -218,7 +218,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/changelog:
+  /changelog:
     get:
       tags:
       - meta
@@ -253,7 +253,7 @@ paths:
                 $ref: '#/components/schemas/ChangelogResponse'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/health:
+  /health:
     get:
       tags:
       - meta
