@@ -192,10 +192,31 @@ _SJ_LAYERS = JurisdictionLayers(
     overlays=(FLOOD_LAYER,),
 )
 
+# San Francisco v4: SF Planning "PlanningData" services (base path /arcgiswa/),
+# live-verified (see docs/data-sources/san_francisco.md). SF has no APN field;
+# the parcel identifier is block+lot (blklot).
+_SF_LAYERS = JurisdictionLayers(
+    slug="san_francisco",
+    parcel=LayerConfig(
+        name="San Francisco parcels (PlanningData/23)",
+        query_url="https://sfplanninggis.org/arcgiswa/rest/services/PlanningData/MapServer/23/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="PlanningData/23",
+        apn_fields=("blklot", "mapblklot"), situs_fields=("street",),
+    ),
+    zoning=LayerConfig(
+        name="San Francisco Zoning Districts (PlanningData/3)",
+        query_url="https://sfplanninggis.org/arcgiswa/rest/services/PlanningData/MapServer/3/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="PlanningData/3",
+        zone_code_fields=("zoning", "zoning_sim"), zone_name_fields=("districtname", "zoning"),
+    ),
+    overlays=(FLOOD_LAYER,),
+)
+
 JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
     _LA_SLUG: _LA_LAYERS,
     "san_diego": _SD_LAYERS,
     "san_jose": _SJ_LAYERS,
+    "san_francisco": _SF_LAYERS,
 }
 
 
