@@ -173,9 +173,29 @@ _SD_LAYERS = JurisdictionLayers(
 
 # The authoritative in-code registry. Only cities whose sources have been
 # ingested and verified belong here (coverage honesty non-negotiable).
+# San Jose v3: City of San Jose PLN services, live-verified (see
+# docs/data-sources/san_jose.md). Parcel layer has no situs field (APN only).
+_SJ_LAYERS = JurisdictionLayers(
+    slug="san_jose",
+    parcel=LayerConfig(
+        name="San Jose parcels (PLN/49)",
+        query_url="https://geo.sanjoseca.gov/server/rest/services/PLN/PLN_Geocortex_Public_PRD/MapServer/49/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="PLN/49",
+        apn_fields=("APN",), situs_fields=(),
+    ),
+    zoning=LayerConfig(
+        name="San Jose Zoning District (PLN/128)",
+        query_url="https://geo.sanjoseca.gov/server/rest/services/PLN/PLN_Geocortex_Public_PRD/MapServer/128/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="PLN/128",
+        zone_code_fields=("ZONING", "ZONINGABBREV"), zone_name_fields=("ZONING",),
+    ),
+    overlays=(FLOOD_LAYER,),
+)
+
 JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
     _LA_SLUG: _LA_LAYERS,
     "san_diego": _SD_LAYERS,
+    "san_jose": _SJ_LAYERS,
 }
 
 
