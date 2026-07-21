@@ -1,0 +1,50 @@
+# Keep the Docker build context small and, most importantly, keep secrets and
+# unrelated subtrees out of every image layer. Both docker/Dockerfile.api and
+# docker/Dockerfile.ingestion build with the repo root as context.
+
+# Never send real secrets into a build context.
+.secrets/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# VCS / editor / OS
+.git/
+.github/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Python
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js (portal and tests are not part of either Python image)
+**/node_modules/
+frontend/
+portal/.next/
+portal/node_modules/
+.next/
+dist/
+build/
+out/
+
+# Supabase local stack artifacts
+supabase/.branches/
+supabase/.temp/
+
+# Test / browser automation artifacts
+test-results/
+playwright-report/
+scraper/
+tests/
+
+# Docs and misc (not needed inside either runtime image)
+docs/
+*.md

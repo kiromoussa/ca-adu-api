@@ -1,0 +1,254 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Python: ruff lint + pytest across services/, ingestion/, tests/. Installs
+  # each subtree's requirements.txt if present so the job still works before
+  # every subtree has landed, and installs nothing PostGIS-specific here -
+  # migration/spatial validation is the dedicated migrate-validate job below.
+  # ---------------------------------------------------------------------------
+  python:
+    name: Python lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest
+          # services/requirements.txt is the single shared manifest for both
+          # services/api and services/core (there is no per-subpackage file).
+          # ingestion/gis and ingestion/code each ship their own manifest
+          # (there is no top-level ingestion/requirements.txt).
+          for req in services/requirements.txt ingestion/gis/requirements.txt \
+                     ingestion/code/requirements.txt tests/requirements-dev.txt; do
+            if [ -f "$req" ]; then
+              echo "installing $req"
+              pip install -r "$req"
+            fi
+          done
+
+      - name: Ruff lint
+        run: ruff check services ingestion tests
+
+      - name: Ruff format check
+        run: ruff format --check services ingestion tests
+
+      - name: pytest
+        run: pytest -q
+        env:
+          # Unit tests should not require live secrets; component tests that do
+          # need a database use the migrate-validate job's postgis service or
+          # skip themselves via pytest.importorskip when deps are absent.
+          SUPABASE_URL: http://localhost:54321
+          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+
+  # ---------------------------------------------------------------------------
+  # Portal: tsc + next build. Targets portal/ (the ADR target layout); falls
+  # back to frontend/ if the portal/ rename has not landed yet so this job
+  # keeps passing during the pivot instead of hard-failing on a path that
+  # doesn't exist yet.
+  # ---------------------------------------------------------------------------
+  portal:
+    name: Portal typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve portal directory
+        id: portal
+        run: |
+          if [ -d portal ]; then
+            echo "dir=portal" >> "$GITHUB_OUTPUT"
+          elif [ -d frontend ]; then
+            echo "dir=frontend" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.portal.outputs.dir != ''
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ steps.portal.outputs.dir }}/package-lock.json
+
+      - name: Install
+        if: steps.portal.outputs.dir != ''
+        working-directory: ${{ steps.portal.outputs.dir }}
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.portal.outputs.dir != ''
+        working-directory: ${{ steps.portal.outputs.dir }}
+        run: npx tsc --noEmit
+
+      - name: Build
+        if: steps.portal.outputs.dir != ''
+        working-directory: ${{ steps.portal.outputs.dir }}
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.aduatlas.com/v1
+          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+        run: npm run build
+
+      - name: No portal directory found
+        if: steps.portal.outputs.dir == ''
+        run: echo "::warning::neither portal/ nor frontend/ exists yet, skipping"
+
+  # ---------------------------------------------------------------------------
+  # Migration validation: spin up postgis/postgis:15-3.4 and apply every file
+  # in supabase/migrations/ in filename order, exactly as `make migrate` does
+  # locally. Catches ordering bugs, syntax errors, and missing extensions
+  # before they reach a real Supabase project.
+  # ---------------------------------------------------------------------------
+  migrate-validate:
+    name: Migration validation (PostGIS)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:15-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGPASSWORD: postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure psql is available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+          fi
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -U postgres && break
+            sleep 1
+          done
+
+      - name: Apply migrations in order
+        run: |
+          shopt -s nullglob
+          files=(supabase/migrations/*.sql)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no migrations found under supabase/migrations/"
+            exit 1
+          fi
+          for f in $(printf '%s\n' "${files[@]}" | sort); do
+            echo "applying $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Sanity-check PostGIS + core tables exist
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select postgis_full_version();"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select to_regclass('public.jurisdictions') is not null as ok;" | grep -q t
+
+  # ---------------------------------------------------------------------------
+  # OpenAPI validation: openapi/openapi.yaml (3.1) must parse and validate.
+  # ---------------------------------------------------------------------------
+  openapi-validate:
+    name: OpenAPI validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install openapi-spec-validator
+        run: pip install "openapi-spec-validator>=0.7"
+
+      - name: Validate openapi/openapi.yaml
+        run: openapi-spec-validator openapi/openapi.yaml
+
+  # ---------------------------------------------------------------------------
+  # Security: pip-audit on every Python requirements file, gitleaks secret
+  # scan over full git history, npm audit on the portal (if present).
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          status=0
+          for req in services/requirements.txt ingestion/gis/requirements.txt \
+                     ingestion/code/requirements.txt tests/requirements-dev.txt; do
+            if [ -f "$req" ]; then
+              echo "auditing $req"
+              pip-audit -r "$req" || status=1
+            fi
+          done
+          exit $status
+
+      - name: gitleaks (secret scan)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source="/repo" --redact -v
+
+      - name: Resolve portal directory
+        id: portal
+        run: |
+          if [ -d portal ]; then
+            echo "dir=portal" >> "$GITHUB_OUTPUT"
+          elif [ -d frontend ]; then
+            echo "dir=frontend" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.portal.outputs.dir != ''
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ steps.portal.outputs.dir }}/package-lock.json
+
+      - name: npm audit (portal)
+        if: steps.portal.outputs.dir != ''
+        working-directory: ${{ steps.portal.outputs.dir }}
+        run: |
+          npm ci
+          npm audit --audit-level=high

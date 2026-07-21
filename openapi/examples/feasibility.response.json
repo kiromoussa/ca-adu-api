@@ -1,0 +1,557 @@
+{
+  "analysis_id": "b8e6f9d2-4b7d-4b0e-9a45-1e6a9d5c9d2f",
+  "request": {
+    "address": "1234 S Main St, Los Angeles, CA 90015",
+    "normalized_address": "1234 S Main St, Los Angeles, CA 90015, USA",
+    "project_type": "detached_adu",
+    "target_sqft": 800,
+    "bedrooms": 1,
+    "proposed_height_ft": 16
+  },
+  "coverage": {
+    "jurisdiction_slug": "los_angeles",
+    "jurisdiction_name": "City of Los Angeles",
+    "coverage_status": "production",
+    "matched_confidence": "high",
+    "provenance": {
+      "source_url": "https://geohub.lacity.org/datasets/city-boundary",
+      "source_title": "City of Los Angeles boundary",
+      "source_section": null,
+      "source_layer": "city_boundary/MapServer/0",
+      "retrieved_at": "2026-07-18T09:12:00Z",
+      "last_verified_at": "2026-07-18T09:12:00Z",
+      "confidence": "high",
+      "data_status": "current",
+      "snapshot_hash": "sha256:8f14e45fceea167a5a36dedd4bea2543a6f1d4b3d0f7e6c9a2b1c0d3e4f5a6b"
+    }
+  },
+  "parcel": {
+    "apn": {
+      "value": "5144-021-015",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/2",
+        "source_title": "LA City ZIMAS parcels",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/2",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a"
+      },
+      "note": null
+    },
+    "matched": true,
+    "match_method": "st_contains",
+    "match_tolerance_m": 0.5,
+    "lot_size_sqft": {
+      "value": 5227,
+      "unit": "sqft",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/2",
+        "source_title": "LA City ZIMAS parcels",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/2",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a"
+      },
+      "state_baseline": null,
+      "compliance_flag": null,
+      "note": null
+    },
+    "centroid": {
+      "lon": -118.2673,
+      "lat": 34.0342
+    }
+  },
+  "zoning": {
+    "zone_code": {
+      "value": "R1",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/26",
+        "source_title": "LA City ZIMAS zoning districts",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/26",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:6dcd4ce23d88e2ee9568ba546c007c63d9131c1b2b0d3f4a5e6c7d8b9a0f1e2"
+      },
+      "note": null
+    },
+    "zone_name": {
+      "value": "One-Family Zone",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/26",
+        "source_title": "LA City ZIMAS zoning districts",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/26",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:6dcd4ce23d88e2ee9568ba546c007c63d9131c1b2b0d3f4a5e6c7d8b9a0f1e2"
+      },
+      "note": null
+    },
+    "cross_zone_ambiguity": false,
+    "general_plan": {
+      "value": "Low Medium I Residential",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/28",
+        "source_title": "LA City ZIMAS general plan land use",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/28",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "medium",
+        "data_status": "current",
+        "snapshot_hash": "sha256:1a79a4d60de6718e8e5b326e338ae533f5c9e9a04c5b5b4f5d6e7f8a9b0c1d2"
+      },
+      "note": null
+    }
+  },
+  "feasibility_status": "likely_feasible",
+  "score": {
+    "value": 82,
+    "explanation": "Parcel matched with high confidence in an R1 zone that permits detached ADUs by right. Proposed 800 sqft / 16 ft height is within the state-law floor and no overlay hits were found. Score reduced from a maximum band because front-yard setback orientation could not be confirmed from GIS data alone."
+  },
+  "eligible_paths": [
+    {
+      "path_type": "detached_adu",
+      "status": "likely_eligible",
+      "reason": "R1 permits one detached ADU per single-family lot. Proposed 800 sqft and 16 ft height meet the AB 2221 state floor and do not exceed the LAMC 12.22 A.33 zone maximum.",
+      "sources": [
+        {
+          "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+          "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+          "source_section": "LAMC 12.22 A.33",
+          "source_layer": null,
+          "retrieved_at": "2026-07-15T06:00:00Z",
+          "last_verified_at": "2026-07-15T06:00:00Z",
+          "confidence": "high",
+          "data_status": "current",
+          "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+        }
+      ]
+    },
+    {
+      "path_type": "jadu",
+      "status": "conditional",
+      "reason": "A JADU is additionally allowed on this lot (one JADU plus one ADU permitted on a single-family lot under Gov Code 66333), conditional on owner-occupancy if sanitation is shared with the primary dwelling.",
+      "sources": [
+        {
+          "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
+          "source_title": "HCD ADU Handbook (state baseline)",
+          "source_section": "Chapter 4 - JADUs",
+          "source_layer": null,
+          "retrieved_at": "2026-06-01T00:00:00Z",
+          "last_verified_at": "2026-06-01T00:00:00Z",
+          "confidence": "high",
+          "data_status": "current",
+          "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
+        }
+      ]
+    },
+    {
+      "path_type": "sb9_urban_lot_split",
+      "status": "needs_professional_review",
+      "reason": "Lot size (5,227 sqft) is above the SB 9 minimum split threshold, but a proposed detached_adu request does not itself evaluate a lot split; a separate SB 9 application review is required to confirm the resulting parcel sizes meet the 40/60 ratio and 1,200 sqft minimum.",
+      "sources": [
+        {
+          "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
+          "source_title": "HCD ADU Handbook (state baseline)",
+          "source_section": "Chapter 6 - SB 9",
+          "source_layer": null,
+          "retrieved_at": "2026-06-01T00:00:00Z",
+          "last_verified_at": "2026-06-01T00:00:00Z",
+          "confidence": "medium",
+          "data_status": "current",
+          "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
+        }
+      ]
+    }
+  ],
+  "development_constraints": {
+    "max_height_ft": {
+      "value": 16,
+      "unit": "ft",
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(e)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": 16,
+      "compliance_flag": "compliant",
+      "note": null
+    },
+    "max_size_sqft": {
+      "value": 1200,
+      "unit": "sqft",
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(c)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": 1200,
+      "compliance_flag": "compliant",
+      "note": "State floor is 850 sqft (1 br) / 1000 sqft (2 br); LAMC allows up to the 1,200 sqft general cap."
+    },
+    "side_setback_ft": {
+      "value": 4,
+      "unit": "ft",
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(f)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": 4,
+      "compliance_flag": "compliant",
+      "note": null
+    },
+    "rear_setback_ft": {
+      "value": 4,
+      "unit": "ft",
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(f)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": 4,
+      "compliance_flag": "compliant",
+      "note": null
+    },
+    "front_setback_ft": {
+      "value": null,
+      "unit": "ft",
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(f)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "low",
+        "data_status": "needs_review",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": null,
+      "compliance_flag": "needs_review",
+      "note": "Front-yard orientation could not be confirmed from GIS data alone; an 800 sqft ADU cannot be blocked by a front setback under AB 2221, but the applicable local distance was not resolvable for this parcel. See limitations."
+    },
+    "parking_required": {
+      "value": false,
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(h)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": false,
+      "compliance_flag": "compliant",
+      "note": null
+    },
+    "owner_occupancy_required": {
+      "value": false,
+      "provenance": {
+        "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+        "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+        "source_section": "LAMC 12.22 A.33(b)",
+        "source_layer": null,
+        "retrieved_at": "2026-07-15T06:00:00Z",
+        "last_verified_at": "2026-07-15T06:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+      },
+      "state_baseline": false,
+      "compliance_flag": "compliant",
+      "note": null
+    },
+    "permit_review_days": {
+      "value": 60,
+      "unit": "days",
+      "provenance": {
+        "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
+        "source_title": "HCD ADU Handbook (state baseline)",
+        "source_section": "Chapter 3 - Development Standards",
+        "source_layer": null,
+        "retrieved_at": "2026-06-01T00:00:00Z",
+        "last_verified_at": "2026-06-01T00:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
+      },
+      "state_baseline": 60,
+      "compliance_flag": "compliant",
+      "note": null
+    },
+    "impact_fee_exempt_sqft_threshold": {
+      "value": 750,
+      "unit": "sqft",
+      "provenance": {
+        "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
+        "source_title": "HCD ADU Handbook (state baseline)",
+        "source_section": "Chapter 5 - Fees",
+        "source_layer": null,
+        "retrieved_at": "2026-06-01T00:00:00Z",
+        "last_verified_at": "2026-06-01T00:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
+      },
+      "state_baseline": 750,
+      "compliance_flag": "compliant",
+      "note": "Proposed 800 sqft is above the 750 sqft impact-fee-exempt threshold; impact fees are charged proportionally, not waived."
+    },
+    "fire_sprinkler_required": {
+      "value": false,
+      "provenance": {
+        "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
+        "source_title": "HCD ADU Handbook (state baseline)",
+        "source_section": "Chapter 3 - Development Standards",
+        "source_layer": null,
+        "retrieved_at": "2026-06-01T00:00:00Z",
+        "last_verified_at": "2026-06-01T00:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
+      },
+      "state_baseline": false,
+      "compliance_flag": "compliant",
+      "note": null
+    }
+  },
+  "overlay_findings": [
+    {
+      "overlay_type": "flood",
+      "status": "no_hit",
+      "raw_values": null,
+      "description": "Parcel does not intersect a FEMA Special Flood Hazard Area.",
+      "provenance": {
+        "source_url": "https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28",
+        "source_title": "FEMA National Flood Hazard Layer",
+        "source_section": null,
+        "source_layer": "NFHL/MapServer/28",
+        "retrieved_at": "2026-07-10T00:00:00Z",
+        "last_verified_at": "2026-07-10T00:00:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:5d41402abc4b2a76b9719d911017c592e6a3e8f9d0c1b2a3e4f5d6c7b8a9f0e"
+      }
+    },
+    {
+      "overlay_type": "fire",
+      "status": "no_hit",
+      "raw_values": null,
+      "description": "Parcel does not intersect a CAL FIRE / OSFM Fire Hazard Severity Zone.",
+      "provenance": {
+        "source_url": "https://gis.data.ca.gov/datasets/CALFIRE-Forestry::fire-hazard-severity-zones",
+        "source_title": "CAL FIRE / OSFM Fire Hazard Severity Zones",
+        "source_section": null,
+        "source_layer": "FHSZ/MapServer/0",
+        "retrieved_at": "2026-07-05T00:00:00Z",
+        "last_verified_at": "2026-07-05T00:00:00Z",
+        "confidence": "medium",
+        "data_status": "current",
+        "snapshot_hash": "sha256:aab3238922bcc25a6f606eb525ffd0c35c9ad475c7b39d1d5a9c3a6c8e4f0b1"
+      }
+    },
+    {
+      "overlay_type": "hpoz",
+      "status": "no_hit",
+      "raw_values": null,
+      "description": "Parcel is not within a Historic Preservation Overlay Zone.",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/33",
+        "source_title": "LA City ZIMAS HPOZ boundaries",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/33",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f"
+      }
+    },
+    {
+      "overlay_type": "hillside",
+      "status": "no_hit",
+      "raw_values": null,
+      "description": "Parcel is not within a designated Hillside Area.",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/40",
+        "source_title": "LA City ZIMAS hillside area boundaries",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/40",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "high",
+        "data_status": "current",
+        "snapshot_hash": "sha256:9c1185a5c5e9fc54612808977ee8f548b2258d31f4d5b8e0c3a2b1d4e5f6a7b"
+      }
+    }
+  ],
+  "approximate_envelope": {
+    "available": true,
+    "label": "approximate conceptual envelope",
+    "buildable_area_sqft": {
+      "value": 1450,
+      "unit": "sqft",
+      "provenance": {
+        "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/2",
+        "source_title": "LA City ZIMAS parcels",
+        "source_section": null,
+        "source_layer": "zma/zimas/MapServer/2",
+        "retrieved_at": "2026-07-18T09:12:00Z",
+        "last_verified_at": "2026-07-18T09:12:00Z",
+        "confidence": "medium",
+        "data_status": "current",
+        "snapshot_hash": "sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a"
+      },
+      "state_baseline": null,
+      "compliance_flag": null,
+      "note": "Rear-yard portion of the lot remaining after a 4 ft side/rear PostGIS interior buffer. Front setback was not netted out because orientation is unconfirmed; treat this figure as an upper bound."
+    },
+    "method": "PostGIS ST_Buffer negative offset of the parcel polygon by the applicable side/rear setback (4 ft, converted to meters), intersected with the parcel; front setback excluded pending orientation confirmation.",
+    "assumptions": [
+      "Parcel boundary from ZIMAS is treated as the buildable lot boundary.",
+      "Detached ADU is assumed to be sited away from the existing single-family structure footprint.",
+      "No easements, slopes, utility corridors, trees, HOA covenants, or title exceptions are reflected; none were queried."
+    ],
+    "limitations": [
+      "Front, side, and rear orientation of the parcel relative to the street could not be determined from GIS data alone; the front setback was not applied and the figure above should be treated as approximate and upper-bound.",
+      "This is a conceptual envelope for preliminary siting discussion only, not a surveyed buildable area."
+    ]
+  },
+  "assumptions": [
+    {
+      "text": "The address geocoded to a single rooftop point inside one parcel with no boundary ambiguity.",
+      "provenance": null
+    },
+    {
+      "text": "No existing ADU or JADU was found recorded against this parcel in available source data.",
+      "provenance": null
+    }
+  ],
+  "limitations": [
+    {
+      "code": "orientation_unknown",
+      "text": "Front/side/rear orientation of the parcel could not be determined from GIS data alone. The front setback field and part of the approximate envelope reflect this limitation rather than a computed value."
+    },
+    {
+      "code": "no_survey",
+      "text": "No survey, title report, easement data, slope analysis, tree survey, or HOA covenant was consulted. Verify these with a licensed surveyor, title company, and the jurisdiction before proceeding."
+    }
+  ],
+  "sources": [
+    {
+      "source_url": "https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835",
+      "source_title": "LAMC 12.22 A.33 - Accessory Dwelling Units",
+      "source_section": "LAMC 12.22 A.33",
+      "source_layer": null,
+      "retrieved_at": "2026-07-15T06:00:00Z",
+      "last_verified_at": "2026-07-15T06:00:00Z",
+      "confidence": "high",
+      "data_status": "current",
+      "snapshot_hash": "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d0"
+    },
+    {
+      "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/2",
+      "source_title": "LA City ZIMAS parcels",
+      "source_section": null,
+      "source_layer": "zma/zimas/MapServer/2",
+      "retrieved_at": "2026-07-18T09:12:00Z",
+      "last_verified_at": "2026-07-18T09:12:00Z",
+      "confidence": "high",
+      "data_status": "current",
+      "snapshot_hash": "sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a"
+    },
+    {
+      "source_url": "https://zimas.lacity.org/arcgis/rest/services/zma/zimas/MapServer/26",
+      "source_title": "LA City ZIMAS zoning districts",
+      "source_section": null,
+      "source_layer": "zma/zimas/MapServer/26",
+      "retrieved_at": "2026-07-18T09:12:00Z",
+      "last_verified_at": "2026-07-18T09:12:00Z",
+      "confidence": "high",
+      "data_status": "current",
+      "snapshot_hash": "sha256:6dcd4ce23d88e2ee9568ba546c007c63d9131c1b2b0d3f4a5e6c7d8b9a0f1e2"
+    },
+    {
+      "source_url": "https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28",
+      "source_title": "FEMA National Flood Hazard Layer",
+      "source_section": null,
+      "source_layer": "NFHL/MapServer/28",
+      "retrieved_at": "2026-07-10T00:00:00Z",
+      "last_verified_at": "2026-07-10T00:00:00Z",
+      "confidence": "high",
+      "data_status": "current",
+      "snapshot_hash": "sha256:5d41402abc4b2a76b9719d911017c592e6a3e8f9d0c1b2a3e4f5d6c7b8a9f0e"
+    },
+    {
+      "source_url": "https://gis.data.ca.gov/datasets/CALFIRE-Forestry::fire-hazard-severity-zones",
+      "source_title": "CAL FIRE / OSFM Fire Hazard Severity Zones",
+      "source_section": null,
+      "source_layer": "FHSZ/MapServer/0",
+      "retrieved_at": "2026-07-05T00:00:00Z",
+      "last_verified_at": "2026-07-05T00:00:00Z",
+      "confidence": "medium",
+      "data_status": "current",
+      "snapshot_hash": "sha256:aab3238922bcc25a6f606eb525ffd0c35c9ad475c7b39d1d5a9c3a6c8e4f0b1"
+    },
+    {
+      "source_url": "https://www.hcd.ca.gov/building-standards/adu/handbook",
+      "source_title": "HCD ADU Handbook (state baseline)",
+      "source_section": "Chapter 3 - Development Standards",
+      "source_layer": null,
+      "retrieved_at": "2026-06-01T00:00:00Z",
+      "last_verified_at": "2026-06-01T00:00:00Z",
+      "confidence": "high",
+      "data_status": "current",
+      "snapshot_hash": "sha256:74e6f7298a9c2d168935f58c001bad88d347f9ee78e26cf7fe1e63ff5a7f0e6"
+    }
+  ],
+  "freshness": {
+    "analysis_version": "1.0.0",
+    "rules_version": "2026.07.1",
+    "state_baseline_version": "2026.01",
+    "generated_at": "2026-07-20T18:42:11Z",
+    "data_as_of": "2026-07-18T09:12:00Z"
+  },
+  "share_token": "shr_9k2m4p1qz7x3vb6n",
+  "disclaimer": "This is preliminary informational zoning and GIS analysis, not legal, architectural, surveying, engineering, title, environmental, or permit advice. Verify all results with the applicable jurisdiction and qualified professionals before making decisions or spending money."
+}

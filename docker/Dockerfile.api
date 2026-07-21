@@ -1,0 +1,69 @@
+# ADU Atlas API - FastAPI request-path service.
+#
+# Build context MUST be the repository root (not docker/), because this image
+# pulls in three sibling subtrees: services/api (the app), services/core (the
+# deterministic rule engine + PostGIS spatial feasibility logic imported by the
+# app as a local package), and config/ (plans.yaml, sources.yaml,
+# jurisdictions.yaml - read at runtime, not compiled in). Build with:
+#
+#   docker build -f docker/Dockerfile.api -t adu-atlas-api .
+#
+# Assumed contract with services/ (owned by the API + core subtrees):
+#   - services/requirements.txt is the single, shared Python dependency
+#     manifest for both services/api and services/core (fastapi, uvicorn,
+#     pydantic, psycopg[binary], shapely, pyproj, httpx, etc). There is no
+#     separate services/api/requirements.txt or services/core/requirements.txt.
+#   - services/api/main.py exposes an ASGI app instance named `app`, imported
+#     here as services.api.main:app (services/api/__init__.py documents this
+#     same import path). services/__init__.py makes `services` a regular
+#     package so `services.api.main` and `services.core.*` resolve.
+#   - GET /v1/health responds 200 when the service is healthy (used below and
+#     by render.yaml's healthCheckPath).
+# If the API subtree's entrypoint module differs, update the CMD below - this
+# is the one place the app import path is wired for the container image.
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# libpq5: Postgres client library (psycopg2/asyncpg runtime linking).
+# libgeos-c1v5: GEOS runtime for shapely (parcel/zoning geometry handling).
+# curl: used by the container HEALTHCHECK below.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        libpq5 \
+        libgeos-c1v5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies before copying source so dependency layers cache
+# independently of application code changes.
+COPY services/requirements.txt ./services/requirements.txt
+RUN pip install --no-cache-dir -r services/requirements.txt
+
+# Application source. services/__init__.py + services/core make up the local
+# (non-PyPI) package services.api imports as `..core`; config/ and openapi/
+# are read at runtime, not imported.
+COPY services/__init__.py ./services/__init__.py
+COPY services/core ./services/core
+COPY services/api ./services/api
+COPY config ./config
+COPY openapi ./openapi
+
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fsS "http://localhost:${PORT:-8000}/v1/health" || exit 1
+
+# Render (and most PaaS docker runtimes) inject PORT; default to 8000 for
+# local/docker-compose use. WEB_CONCURRENCY tunes uvicorn worker count.
+CMD ["sh", "-c", "uvicorn services.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-2} --proxy-headers"]

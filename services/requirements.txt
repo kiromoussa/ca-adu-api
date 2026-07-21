@@ -1,0 +1,25 @@
+# ADU Atlas API - deterministic core + FastAPI service dependencies.
+# The Dockerfile / Render service definition is owned by the devops agent; this
+# file is the authoritative Python dependency manifest for services/.
+
+# Web framework + ASGI server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Validation (Pydantic v2 - single source of truth on the server)
+pydantic==2.10.4
+
+# Postgres / PostGIS access (sync psycopg 3 + connection pool)
+psycopg[binary]==3.2.3
+psycopg-pool==3.2.4
+
+# Geometry + projection helpers (envelope math; PostGIS does the heavy lifting)
+shapely==2.0.6
+pyproj==3.7.0
+
+# Config + HTTP client (geocoder seam)
+pyyaml==6.0.2
+httpx==0.28.1
+
+# --- Dev / test only ---
+pytest==8.3.4

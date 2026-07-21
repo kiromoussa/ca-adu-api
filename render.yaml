@@ -1,52 +1,110 @@
-# Consolidated Render blueprint for the CA ADU Zoning API background workers.
+# ADU Atlas API - Render blueprint.
 #
-# One-time setup (dashboard-gated because Render must install its GitHub App on
-# the repo): Render Dashboard -> New -> Blueprint -> connect github.com/kiromoussa/ca-adu-api
-# -> Render auto-detects this file and provisions the three cron workers below.
-# Then set the sync:false secrets (SUPABASE_*, LLM keys, SLACK/HCD) in the
-# dashboard once. Schedules are staggered: scrape 03:00 -> extract 04:30 -> QA 06:00 (UTC, Mon).
+# Replaces the prior scraper-product blueprint (web service + 3 cron workers
+# for the old CA ADU Zoning API scraper/pipeline/qa). This version deploys the
+# ADU Atlas pivot: a Docker-based FastAPI request-path service plus three
+# Docker-based cron workers for GIS ingestion, municipal-code ingestion, and
+# HCD compliance QA, per docs/adr/0001-architecture.md and docs/PRODUCT_SPEC.md.
+#
+# One-time setup (dashboard-gated - Render must install its GitHub App on the
+# repo): Render Dashboard -> New -> Blueprint -> connect
+# github.com/kiromoussa/ca-adu-api -> Render detects this file and provisions
+# the services below. Then set every `sync: false` secret once in the
+# dashboard. See .env.example for the full variable set and docs/DEPLOY.md for
+# the ordered rollout.
+#
+# Both Dockerfiles build with the repo root as context (dockerContext: .) so
+# they can pull in the sibling services/core, config/, and openapi/ subtrees -
+# see docker/Dockerfile.api and docker/Dockerfile.ingestion for the exact
+# COPY list and the assumed module entrypoints.
+#
+# Cron schedules are staggered (UTC, Monday): GIS ingestion 03:00 -> code
+# ingestion 04:30 -> QA cross-check 06:00, so each stage reads data the
+# previous stage has already refreshed. autoDeploy is false on the cron
+# workers so a new ingestion image is only rolled out intentionally.
 
 services:
-  # 1. Scraper: pull raw ADU/zoning sections into zoning_sections.
-  - type: cron
-    name: ca-adu-scraper
-    runtime: python
+  # 1. FastAPI request-path service: deterministic rule engine + PostGIS
+  #    spatial feasibility. No LLM on this path (see docs/PRODUCT_SPEC.md).
+  - type: web
+    name: adu-atlas-api
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.api
+    dockerContext: .
     plan: starter
-    schedule: "0 3 * * 1"
-    buildCommand: "pip install -r scraper/requirements.txt && python -m playwright install --with-deps chromium"
-    startCommand: "python -m scraper.main"
-    autoDeploy: false
+    region: oregon
+    healthCheckPath: /v1/health
+    autoDeploy: true
     envVars:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: SCRAPER_HEADLESS
-        value: "true"
-      - key: SCRAPER_RATE_LIMIT_SECONDS
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: RAPIDAPI_PROXY_SECRET
+        sync: false
+      - key: GEOCODER_PROVIDER
+        value: census
+      - key: GOOGLE_MAPS_GEOCODING_API_KEY
+        sync: false
+      - key: MAPBOX_ACCESS_TOKEN
+        sync: false
+      - key: WEB_CONCURRENCY
         value: "2"
-      - key: SCRAPER_MAX_SECTIONS_PER_CITY
-        value: "25"
-      - key: PLAYWRIGHT_BROWSERS_PATH
-        value: "0"
-      - key: PYTHON_VERSION
-        value: "3.12.7"
 
-  # 2. Extraction + state-law validation: zoning_sections -> adu_rules.
+  # 2. GIS ingestion: LA City ZIMAS parcels + zoning districts, FEMA NFHL
+  #    flood, CAL FIRE FHSZ. Writes parcels, zoning_districts,
+  #    overlay_features, source_registry, ingest_runs. LA City is the v1
+  #    target and is hardcoded as the jurisdiction inside
+  #    ingestion/gis/la_zimas.py, so `all` (not a --jurisdiction flag, which
+  #    this entrypoint does not take) is the correct source selector; the
+  #    statewide zoning bootstrap is opt-in (`--slug <other-city>`) and is not
+  #    needed for LA, which has its own authoritative zoning layer.
   - type: cron
-    name: ca-adu-pipeline
-    runtime: python
+    name: adu-atlas-ingest-gis
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.ingestion
+    dockerContext: .
+    dockerCommand: "python -m ingestion.gis.run all"
+    schedule: "0 3 * * 1"
     plan: starter
-    schedule: "30 4 * * 1"
-    buildCommand: "pip install -r scraper/pipeline/requirements.txt"
-    startCommand: "python -m scraper.pipeline.run --all"
+    region: oregon
     autoDeploy: false
     envVars:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      # Provide exactly one LLM provider.
+
+  # 3. Municipal-code ingestion: LAMC sections into zoning_sections +
+  #    immutable source_snapshots, then offline LLM extraction candidates into
+  #    zoning_rules / rule_attributes (review_status pending human/source
+  #    validation - never auto-verified). LLM is offline-only, never on the
+  #    API request path.
+  #    ingestion/code/run.py and its sibling modules use flat, non-package
+  #    imports by design (see ingestion/code/README.md), so it must run with
+  #    ingestion/code/ as the working directory rather than as
+  #    `python -m ingestion.code.run`. Runs the `ingest` then `extract` stages;
+  #    `validate` (the QA cross-check) is scheduled separately below.
+  - type: cron
+    name: adu-atlas-ingest-code
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.ingestion
+    dockerContext: .
+    dockerCommand: >-
+      sh -c "cd ingestion/code && python run.py ingest --jurisdiction los_angeles
+      && python run.py extract --jurisdiction los_angeles"
+    schedule: "30 4 * * 1"
+    plan: starter
+    region: oregon
+    autoDeploy: false
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Provide exactly one LLM provider for offline extraction.
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: AZURE_OPENAI_ENDPOINT
@@ -55,17 +113,27 @@ services:
         sync: false
       - key: AZURE_OPENAI_DEPLOYMENT
         sync: false
-      - key: PYTHON_VERSION
-        value: "3.12.7"
+      - key: AZURE_OPENAI_API_VERSION
+        sync: false
 
-  # 3. HCD compliance QA cross-check -> qa_alerts + Slack/email.
+  # 4. Compliance QA cross-check: state_rule_baselines vs. extracted
+  #    zoning_rules, writes qa_issues. Runs last so it reads the current run's
+  #    ingestion output. This is the `validate` stage of ingestion/code/run.py
+  #    (there is no separate `ingestion.code.qa` module); like the ingest-code
+  #    cron above, it must run with ingestion/code/ as the working directory.
+  #    HCD Housing Element APR cross-reference and Slack alerting
+  #    (SLACK_WEBHOOK_URL, HCD_APR_DATASET_URL below) are provisioned here for
+  #    the ingestion/code subtree to wire up; they are not required for the
+  #    `validate` stage itself to run.
   - type: cron
-    name: ca-adu-qa-crosscheck
-    runtime: python
-    plan: starter
+    name: adu-atlas-qa-crosscheck
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.ingestion
+    dockerContext: .
+    dockerCommand: 'sh -c "cd ingestion/code && python run.py validate --jurisdiction los_angeles"'
     schedule: "0 6 * * 1"
-    buildCommand: "pip install -r scraper/qa/requirements.txt"
-    startCommand: "python -m scraper.qa.run"
+    plan: starter
+    region: oregon
     autoDeploy: false
     envVars:
       - key: SUPABASE_URL
@@ -74,7 +142,13 @@ services:
         sync: false
       - key: SLACK_WEBHOOK_URL
         sync: false
-      - key: HCD_APR_CSV_URL
+      - key: HCD_APR_DATASET_URL
         sync: false
-      - key: PYTHON_VERSION
-        value: "3.12.7"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false

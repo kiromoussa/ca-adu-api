@@ -1,0 +1,649 @@
+openapi: 3.1.0
+info:
+  title: ADU Atlas API
+  version: "1.0.0"
+  description: >
+    Self-serve, developer-facing California parcel feasibility API for ADUs,
+    JADUs, and SB 9 preliminary analysis. The request path is fully
+    deterministic: versioned zoning rules, California state-law baselines,
+    and PostGIS spatial joins against official parcel, zoning, and
+    hazard-overlay geometry. No large language model is used at request
+    time. Every substantive result field carries provenance (source_url,
+    source_title, source_section or source_layer, retrieved_at,
+    last_verified_at, confidence, data_status) and every response includes
+    the disclaimer verbatim. This document is a bundled snapshot shipped
+    with the developer portal; the canonical, always-current specification
+    is served live by the API at /openapi.json.
+  contact:
+    name: ADU Atlas API
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.aduatlas.com
+    description: Production API
+tags:
+  - name: feasibility
+    description: Address-level ADU, JADU, and SB 9 preliminary feasibility analysis.
+  - name: jurisdictions
+    description: Jurisdiction coverage, project types, and per-zone rules.
+  - name: analyses
+    description: Retrieve a previously completed analysis.
+  - name: changelog
+    description: Public update history by jurisdiction.
+  - name: health
+    description: Service uptime and non-sensitive source freshness.
+security:
+  - RapidApiKey: []
+  - ApiKeyHeader: []
+paths:
+  /v1/feasibility:
+    post:
+      tags: [feasibility]
+      operationId: createFeasibilityAnalysis
+      summary: Run a preliminary ADU/JADU/SB 9 feasibility analysis
+      description: >
+        Resolves an address to a jurisdiction and parcel, joins zoning and
+        hazard overlays, merges the state-law baseline with local rules
+        without overwriting provenance, and returns a preliminary
+        feasibility result. Billable only when the analysis resolves to a
+        terminal feasibility_status; unsupported-coverage and error
+        responses are never billed.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >
+            Optional idempotency key. A repeated key with an identical
+            request body returns the stored response. A repeated key with a
+            different body returns 409 idempotency_key_conflict.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeasibilityRequest"
+      responses:
+        "200":
+          description: Feasibility analysis completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeasibilityResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnsupportedCoverage"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/QuotaExceeded"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/jurisdictions:
+    get:
+      tags: [jurisdictions]
+      operationId: listJurisdictions
+      summary: List jurisdiction coverage
+      description: >
+        Returns every registered jurisdiction with its coverage status,
+        supported project types, and the last source-update date. Coverage
+        status is never claimed ahead of verified ingestion. Not billable.
+      responses:
+        "200":
+          description: Jurisdiction registry.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/JurisdictionSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/jurisdictions/{slug}/rules:
+    get:
+      tags: [jurisdictions]
+      operationId: getJurisdictionRules
+      summary: Get citywide and per-zone rules for a jurisdiction
+      description: >
+        Returns citywide and zone-level rules with citations and version
+        history for the given jurisdiction slug. Not billable.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: Jurisdiction slug, e.g. los_angeles.
+          schema:
+            type: string
+          examples:
+            losAngeles:
+              value: los_angeles
+        - name: zone
+          in: query
+          required: false
+          description: Optional zone code filter, e.g. R1, RS.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rule set for the jurisdiction.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JurisdictionRules"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnsupportedCoverage"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/analyses/{analysis_id}:
+    get:
+      tags: [analyses]
+      operationId: getAnalysis
+      summary: Retrieve a previously completed analysis
+      description: >
+        Returns a previously completed feasibility analysis by id. Private
+        analyses require authentication as the original caller; analyses
+        created with a shareable token can be retrieved via the public
+        shareable-token route instead. Not billable.
+      parameters:
+        - name: analysis_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Stored feasibility analysis.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeasibilityResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Analysis not found or not visible to the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/changelog:
+    get:
+      tags: [changelog]
+      operationId: getChangelog
+      summary: Public changelog
+      description: >
+        Returns public update history across jurisdictions: source
+        re-ingestions, rule corrections, and coverage-status changes. Not
+        billable, no authentication required.
+      security: []
+      parameters:
+        - name: jurisdiction
+          in: query
+          required: false
+          description: Optional jurisdiction slug filter.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Changelog entries, most recent first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChangelogEntry"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Service health and source freshness
+      description: >
+        Returns service uptime and non-sensitive source freshness
+        (per-jurisdiction last_verified_at). Not billable, no authentication
+        required.
+      security: []
+      responses:
+        "200":
+          description: Health status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+components:
+  securitySchemes:
+    RapidApiKey:
+      type: apiKey
+      in: header
+      name: X-RapidAPI-Key
+      description: >
+        RapidAPI gateway key. Sent alongside X-RapidAPI-Host by the RapidAPI
+        gateway on every proxied request.
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: >
+        Direct API key for callers who integrate outside the RapidAPI
+        gateway. The key is hashed server-side and matched against the
+        stored consumer record.
+
+  responses:
+    ValidationError:
+      description: The request body failed schema validation. Not billed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missingAddress:
+              value:
+                error: validation_error
+                message: "address is required."
+    Unauthorized:
+      description: API key missing, invalid, or revoked.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value:
+                error: authentication_error
+                message: >-
+                  Missing API key. Provide it via X-RapidAPI-Key or the
+                  x-api-key header.
+    UnsupportedCoverage:
+      description: >
+        The address resolved to a jurisdiction whose coverage_status is not
+        production. Not billed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            planned:
+              value:
+                error: unsupported_coverage
+                message: >-
+                  This jurisdiction is registered but not yet ingested.
+                  Coverage status: planned.
+    IdempotencyConflict:
+      description: >
+        The Idempotency-Key was reused with a different request body. Not
+        billed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            conflict:
+              value:
+                error: idempotency_key_conflict
+                message: >-
+                  This Idempotency-Key was already used with a different
+                  request body.
+    QuotaExceeded:
+      description: Monthly quota exceeded for the caller's plan. Not billed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/QuotaError"
+          examples:
+            basic:
+              value:
+                error: quota_exceeded
+                message: >-
+                  Monthly quota exceeded for your plan. Upgrade your plan or
+                  wait for the next billing cycle.
+                plan: BASIC
+                monthly_quota: 3
+    InternalError:
+      description: Unexpected server error. Not billed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          examples: [validation_error]
+        message:
+          type: string
+
+    QuotaError:
+      allOf:
+        - $ref: "#/components/schemas/Error"
+        - type: object
+          required: [plan, monthly_quota]
+          properties:
+            plan:
+              type: string
+              examples: [BASIC]
+            monthly_quota:
+              type: integer
+              examples: [3]
+
+    ProjectType:
+      type: string
+      enum:
+        - detached_adu
+        - attached_adu
+        - garage_conversion
+        - jadu
+        - sb9_duplex
+        - sb9_urban_lot_split
+
+    FeasibilityStatus:
+      type: string
+      enum:
+        - likely_feasible
+        - likely_constrained
+        - needs_professional_review
+        - insufficient_data
+      description: >
+        Never "approved," "legal," or a final yes/no. One of these four
+        values only.
+
+    ConfidenceLevel:
+      type: string
+      enum: [high, medium, low]
+
+    DataStatus:
+      type: string
+      enum: [current, stale, needs_review, unavailable]
+
+    Provenance:
+      type: object
+      description: Attached to every substantive result field.
+      required: [source_url, source_title, retrieved_at, confidence, data_status]
+      properties:
+        source_url:
+          type: string
+          format: uri
+        source_title:
+          type: string
+        source_section:
+          type: [string, "null"]
+          description: Municipal-code section reference, if applicable.
+        source_layer:
+          type: [string, "null"]
+          description: GIS layer name, if applicable.
+        retrieved_at:
+          type: string
+          format: date-time
+        last_verified_at:
+          type: [string, "null"]
+          format: date-time
+        confidence:
+          $ref: "#/components/schemas/ConfidenceLevel"
+        data_status:
+          $ref: "#/components/schemas/DataStatus"
+
+    FeasibilityRequest:
+      type: object
+      required: [address, project_type]
+      properties:
+        address:
+          type: string
+          examples: ["123 Main St, Los Angeles, CA 90012"]
+        project_type:
+          $ref: "#/components/schemas/ProjectType"
+        target_sqft:
+          type: [number, "null"]
+        bedrooms:
+          type: [integer, "null"]
+        proposed_height_ft:
+          type: [number, "null"]
+        existing_structure:
+          type: [string, "null"]
+        options:
+          type: [object, "null"]
+          additionalProperties: true
+
+    EligiblePath:
+      type: object
+      required: [project_type, status]
+      properties:
+        project_type:
+          $ref: "#/components/schemas/ProjectType"
+        status:
+          $ref: "#/components/schemas/FeasibilityStatus"
+        notes:
+          type: [string, "null"]
+
+    OverlayFinding:
+      type: object
+      required: [overlay_type, hit]
+      properties:
+        overlay_type:
+          type: string
+          enum: [flood, fire, historic, coastal, hillside, environmental, hpoz, other]
+        hit:
+          type: [boolean, "null"]
+          description: True/false if resolved, null if the source was unavailable.
+        raw_value:
+          type: [string, "null"]
+        provenance:
+          $ref: "#/components/schemas/Provenance"
+
+    FeasibilityResponse:
+      type: object
+      required: [analysis_id, feasibility_status, disclaimer, sources]
+      properties:
+        analysis_id:
+          type: string
+          format: uuid
+        request:
+          $ref: "#/components/schemas/FeasibilityRequest"
+        coverage:
+          type: object
+          properties:
+            jurisdiction_slug:
+              type: [string, "null"]
+            coverage_status:
+              type: [string, "null"]
+              enum: [planned, ingesting, production, null]
+        parcel_context:
+          type: [object, "null"]
+          properties:
+            apn:
+              type: [string, "null"]
+            geometry_source:
+              type: [string, "null"]
+            provenance:
+              $ref: "#/components/schemas/Provenance"
+        zoning_context:
+          type: [object, "null"]
+          properties:
+            zone_code:
+              type: [string, "null"]
+            zone_name:
+              type: [string, "null"]
+            cross_zone_ambiguity:
+              type: [boolean, "null"]
+            provenance:
+              $ref: "#/components/schemas/Provenance"
+        feasibility_status:
+          $ref: "#/components/schemas/FeasibilityStatus"
+        score:
+          type: [number, "null"]
+          description: Only present when explainable; omitted otherwise.
+        eligible_paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/EligiblePath"
+        development_constraints:
+          type: object
+          description: >
+            Height, size, setback, parking, owner-occupancy, permit-timeline,
+            and impact-fee constraints. Field-level provenance is included in
+            the sources array.
+          additionalProperties: true
+        overlay_findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/OverlayFinding"
+        approximate_envelope:
+          type: [object, "null"]
+          description: >
+            Labeled approximate conceptual envelope, only present where
+            parcel orientation and zoning setbacks are reliably known.
+          additionalProperties: true
+        assumptions:
+          type: array
+          items:
+            type: string
+        limitations:
+          type: array
+          items:
+            type: string
+        sources:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/Provenance"
+              - type: object
+                required: [field]
+                properties:
+                  field:
+                    type: string
+                    description: The response field this provenance entry backs.
+        analysis_version:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        disclaimer:
+          type: string
+          description: Verbatim disclaimer, present on every response.
+          examples:
+            - >-
+              This is preliminary informational zoning and GIS analysis, not
+              legal, architectural, surveying, engineering, title,
+              environmental, or permit advice. Verify all results with the
+              applicable jurisdiction and qualified professionals before
+              making decisions or spending money.
+
+    JurisdictionSummary:
+      type: object
+      required: [slug, display_name, coverage_status, supported_project_types]
+      properties:
+        slug:
+          type: string
+        display_name:
+          type: string
+        coverage_status:
+          type: string
+          enum: [planned, ingesting, production]
+        supported_project_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectType"
+        source_last_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    JurisdictionRules:
+      type: object
+      required: [jurisdiction_slug, rules]
+      properties:
+        jurisdiction_slug:
+          type: string
+        zone_code:
+          type: [string, "null"]
+        rules:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        citations:
+          type: array
+          items:
+            type: string
+        version_history:
+          type: array
+          items:
+            type: object
+            properties:
+              version:
+                type: string
+              effective_at:
+                type: string
+                format: date-time
+
+    ChangelogEntry:
+      type: object
+      required: [title, published_at]
+      properties:
+        id:
+          type: string
+        jurisdiction_slug:
+          type: [string, "null"]
+        jurisdiction_name:
+          type: [string, "null"]
+        title:
+          type: string
+        summary:
+          type: [string, "null"]
+        category:
+          type: [string, "null"]
+          enum: [source_update, rule_correction, coverage_change, feature, other, null]
+        published_at:
+          type: string
+          format: date-time
+
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          examples: [ok]
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              jurisdiction_slug:
+                type: string
+              last_verified_at:
+                type: [string, "null"]
+                format: date-time

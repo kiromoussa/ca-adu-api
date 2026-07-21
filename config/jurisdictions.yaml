@@ -1,0 +1,210 @@
+# ADU Atlas API - jurisdiction registry seed data.
+#
+# Seeds the jurisdictions table. Coverage honesty is a non-negotiable: a city is
+# only `production` after its source registry, GIS layers, and rule set are
+# ingested, tested, and verified. Los Angeles City is the v1 target and is
+# currently `ingesting`; every other city is `planned` until its data lands.
+#
+# coverage_status values:
+#   planned    - registered but no data ingested; feasibility returns
+#                unsupported_coverage (not billed)
+#   ingesting  - data ingestion in progress; not yet production-verified
+#   production - sources + GIS + rules ingested, tested, verified; billable
+#
+# publisher_type values: american_legal | municode
+#
+# project_type values: detached_adu | attached_adu | garage_conversion |
+#   jadu | sb9_duplex | sb9_urban_lot_split
+
+version: 1
+
+# Full v1 project type enum (shared across all jurisdictions).
+project_types:
+  - detached_adu
+  - attached_adu
+  - garage_conversion
+  - jadu
+  - sb9_duplex
+  - sb9_urban_lot_split
+
+jurisdictions:
+  - slug: los_angeles
+    name: Los Angeles
+    display_name: City of Los Angeles
+    state: CA
+    county: Los Angeles
+    publisher_type: american_legal
+    official_code_url: https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835
+    coverage_status: ingesting
+    source_keys:
+      - lamc_amlegal
+      - la_zimas_parcels
+      - la_zimas_zoning
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: >-
+      v1 target jurisdiction. Uses LA City ZIMAS for parcels and zoning. Do not
+      substitute unincorporated LA County zoning. Envelope calculations enabled
+      for LA only.
+
+  - slug: san_diego
+    name: San Diego
+    display_name: City of San Diego
+    state: CA
+    county: San Diego
+    publisher_type: american_legal
+    official_code_url: https://docs.sandiego.gov/municode/MuniCodeChapter14/Ch14Art03Division01.pdf
+    coverage_status: planned
+    source_keys:
+      - sandiego_amlegal
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.
+
+  - slug: san_jose
+    name: San Jose
+    display_name: City of San Jose
+    state: CA
+    county: Santa Clara
+    publisher_type: municode
+    official_code_url: https://library.municode.com/ca/san_jose/codes/code_of_ordinances?nodeId=TIT20ZO
+    coverage_status: planned
+    source_keys:
+      - sanjose_municode
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.
+
+  - slug: san_francisco
+    name: San Francisco
+    display_name: City and County of San Francisco
+    state: CA
+    county: San Francisco
+    publisher_type: american_legal
+    official_code_url: https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/
+    coverage_status: planned
+    source_keys:
+      - sf_amlegal
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.
+
+  - slug: sacramento
+    name: Sacramento
+    display_name: City of Sacramento
+    state: CA
+    county: Sacramento
+    publisher_type: american_legal
+    official_code_url: https://codelibrary.amlegal.com/codes/sacramento/latest/sacramento_ca/
+    coverage_status: planned
+    source_keys:
+      - sacramento_amlegal
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.
+
+  - slug: irvine
+    name: Irvine
+    display_name: City of Irvine
+    state: CA
+    county: Orange
+    publisher_type: municode
+    official_code_url: https://library.municode.com/ca/irvine/codes/code_of_ordinances
+    coverage_status: planned
+    source_keys:
+      - irvine_municode
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.
+
+  - slug: long_beach
+    name: Long Beach
+    display_name: City of Long Beach
+    state: CA
+    county: Los Angeles
+    publisher_type: municode
+    official_code_url: https://library.municode.com/ca/long_beach/codes/municipal_code?nodeId=TIT21ZOREGU
+    coverage_status: planned
+    source_keys:
+      - longbeach_municode
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.
+
+  - slug: oakland
+    name: Oakland
+    display_name: City of Oakland
+    state: CA
+    county: Alameda
+    publisher_type: municode
+    official_code_url: https://library.municode.com/ca/oakland/codes/planning_code
+    coverage_status: planned
+    source_keys:
+      - oakland_municode
+      - fema_nfhl
+      - calfire_fhsz
+      - ca_state_adu_law
+    supported_project_types:
+      - detached_adu
+      - attached_adu
+      - garage_conversion
+      - jadu
+      - sb9_duplex
+      - sb9_urban_lot_split
+    notes: Planned. Not yet ingested; feasibility returns unsupported_coverage.

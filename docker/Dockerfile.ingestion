@@ -1,0 +1,80 @@
+# ADU Atlas API - ingestion image (GIS ingestion, municipal-code ingestion,
+# offline LLM extraction candidates, and QA cross-check all share this image;
+# render.yaml selects which entrypoint to run per cron service via
+# `dockerCommand`, so this Dockerfile only needs to build one environment that
+# supports all of them).
+#
+# Build context MUST be the repository root:
+#   docker build -f docker/Dockerfile.ingestion -t adu-atlas-ingestion .
+#
+# Assumed contract with ingestion/ (owned by the ingestion subtree). The two
+# ingestion subtrees ship separate requirements files (there is no single
+# top-level ingestion/requirements.txt) and use two different invocation
+# styles:
+#   - ingestion/gis/requirements.txt (+ ingestion/arcgis: httpx, tenacity,
+#     psycopg, shapely, pyproj, supabase). Runnable as a regular package
+#     module with a positional source argument (no --jurisdiction flag; LA
+#     City is hardcoded as the target jurisdiction inside
+#     ingestion/gis/la_zimas.py):
+#       python -m ingestion.gis.run <source> [--slug SLUG] [--max-features N]
+#       e.g. python -m ingestion.gis.run all   (la_zimas + fema_flood + calfire_fhsz)
+#   - ingestion/code/requirements.txt (playwright, curl_cffi, beautifulsoup4,
+#     openai/anthropic for the OFFLINE extraction step, supabase client).
+#     ingestion/code/run.py and its sibling modules use flat, non-package
+#     imports (e.g. `import registry`, `from config import Settings`) by
+#     design (see ingestion/code/README.md), so it must be invoked with
+#     ingestion/code/ itself as the working directory, NOT as
+#     `python -m ingestion.code.run`:
+#       cd ingestion/code && python run.py <stage> --jurisdiction <slug>
+#       stage in {ingest, extract, validate, all}; `validate` is the
+#       compliance QA cross-check (state_rule_baselines vs. extracted
+#       zoning_rules -> qa_issues) - there is no separate `ingestion.code.qa`
+#       module.
+#     If the ingestion subtree's module layout or invocation style changes,
+#     only render.yaml's dockerCommand / the Makefile's ingest-* targets need
+#     to change - the image itself is generic.
+#
+# Includes Playwright + Chromium (Municode rendering, per ADR/spec) and
+# curl_cffi (American Legal Publishing render-doc API, Cloudflare bypass via
+# Chrome TLS impersonation).
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+WORKDIR /app
+
+# curl/ca-certificates/gnupg/wget: Playwright's --with-deps installer and
+# general HTTPS fetches. libgeos-c1v5: shapely runtime for geometry handling.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        wget \
+        ca-certificates \
+        gnupg \
+        libgeos-c1v5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ingestion/gis/requirements.txt ./ingestion/gis/requirements.txt
+COPY ingestion/code/requirements.txt ./ingestion/code/requirements.txt
+RUN pip install --no-cache-dir -r ingestion/gis/requirements.txt \
+    && pip install --no-cache-dir -r ingestion/code/requirements.txt \
+    && python -m playwright install --with-deps chromium
+
+COPY services/core ./services/core
+COPY ingestion ./ingestion
+COPY config ./config
+
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
+    && chown -R appuser:appuser /app "${PLAYWRIGHT_BROWSERS_PATH}"
+USER appuser
+
+# No default long-running process; each Render cron service (and `make
+# ingest-la`) supplies its own command. Default to --help so `docker run` with
+# no args fails loudly instead of silently doing nothing.
+CMD ["python", "-m", "ingestion.gis.run", "--help"]

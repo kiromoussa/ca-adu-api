@@ -1,0 +1,17 @@
+{
+  "address": "1234 S Main St, Los Angeles, CA 90015",
+  "project_type": "detached_adu",
+  "target_sqft": 800,
+  "bedrooms": 1,
+  "proposed_height_ft": 16,
+  "existing_structure": {
+    "type": "single_family",
+    "has_garage": true,
+    "year_built": 1948
+  },
+  "options": {
+    "near_transit": false,
+    "historic_property": false,
+    "include_envelope": true
+  }
+}

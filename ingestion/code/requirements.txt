@@ -1,0 +1,37 @@
+# ADU Atlas - OFFLINE municipal-code ingestion + extraction + QA
+# Python 3.11+. Install Playwright browsers separately (Municode path only):
+#   playwright install --with-deps chromium
+#
+# This component is OFFLINE-only and must never be imported by the API request
+# path (services/api, services/core).
+
+# American Legal path: impersonate a real Chrome TLS/JA3 fingerprint to clear
+# the Cloudflare bot check on codelibrary.amlegal.com.
+curl_cffi>=0.7,<0.11
+
+# Municode path: render the client-side-rendered nodeId pages.
+playwright==1.61.0
+
+# HTML parsing + Municode api.municode.com discovery.
+beautifulsoup4==4.13.5
+lxml==5.3.2
+httpx>=0.27,<0.29
+
+# OFFLINE LLM extraction. Azure OpenAI v1 endpoint uses the OpenAI client with
+# base_url; anthropic is an optional fallback provider. extract.py's Anthropic
+# path uses output_config structured outputs, which requires >=0.77.0 (the
+# SDK migrated off the older output_format parameter at that version).
+openai>=1.55.0
+anthropic>=0.77.0
+
+# Strict extraction-schema validation + config parsing.
+jsonschema>=4.21.0
+pydantic>=2.6.0
+PyYAML>=6.0.1
+
+# Service-role DB writes (jurisdictions, source_snapshots, zoning_sections,
+# zoning_rules, rule_attributes, qa_issues, ingest_runs) + Storage upload.
+supabase==2.15.3
+
+# Local .env convenience for offline runs (no-op in production).
+python-dotenv==1.1.1
