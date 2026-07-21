@@ -212,11 +212,31 @@ _SF_LAYERS = JurisdictionLayers(
     overlays=(FLOOD_LAYER,),
 )
 
+# Sacramento v5: Sacramento County GIS (city parcels + City of Sacramento zoning),
+# live-verified (see docs/data-sources/sacramento.md). Zone rules key on BASE_ZONE.
+_SAC_LAYERS = JurisdictionLayers(
+    slug="sacramento",
+    parcel=LayerConfig(
+        name="Sacramento parcels (PARCELS/8)",
+        query_url="https://mapservices.gis.saccounty.net/arcgis/rest/services/PARCELS/MapServer/8/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="PARCELS/8",
+        apn_fields=("APN_DASH", "APN10", "APN"), situs_fields=("STREET_NAME", "STREET_NBR"),
+    ),
+    zoning=LayerConfig(
+        name="City of Sacramento Zoning (CITY_of_SACRAMENTO/3)",
+        query_url="https://mapservices.gis.saccounty.net/arcgis/rest/services/CITY_of_SACRAMENTO/MapServer/3/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="CITY_of_SACRAMENTO/3",
+        zone_code_fields=("BASE_ZONE", "ZONE"), zone_name_fields=("DESCRIPTIO", "ZONE"),
+    ),
+    overlays=(FLOOD_LAYER,),
+)
+
 JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
     _LA_SLUG: _LA_LAYERS,
     "san_diego": _SD_LAYERS,
     "san_jose": _SJ_LAYERS,
     "san_francisco": _SF_LAYERS,
+    "sacramento": _SAC_LAYERS,
 }
 
 
