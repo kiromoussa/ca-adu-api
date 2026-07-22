@@ -525,24 +525,36 @@ class CachingGeocoder:
 def build_default_geocoder(*, timeout_s: float = 8.0) -> "Geocoder":
     """Build the request-path geocoder chain.
 
-    Census (keyless, US-gov) is primary. A keyless OpenStreetMap Nominatim
-    fallback follows so the path is not a single point of failure when Census
-    returns empty / rate-limits (unless ``NOMINATIM_DISABLED`` is set). Google
-    and/or Mapbox are appended when ``GOOGLE_MAPS_GEOCODING_API_KEY`` /
-    ``MAPBOX_ACCESS_TOKEN`` are set - the recommended geocoders for heavy
-    production traffic. Order = Census -> Nominatim -> Google -> Mapbox.
+    Accuracy-first ordering: a paid provider (Google, then Mapbox) is PRIMARY when
+    its key is set, because it returns precise rooftop/parcel-level points. The
+    keyless providers (Census, then OpenStreetMap Nominatim) follow as fallbacks.
+
+    This ordering matters for correctness, not just coverage: Census sometimes
+    returns a high-confidence but coarse/interpolated point that lands off the
+    real parcel (observed for several CA addresses from cloud IPs). If Census were
+    primary, the chain would accept that point and never consult the accurate paid
+    provider - producing an insufficient_data result at best, or a WRONG-parcel
+    result at worst. Trying the precise provider first eliminates that class of bug.
+
+    With no paid key set, the chain is Census -> Nominatim (both keyless), so
+    keyless deployments still have a fallback and are never a single point of
+    failure. Opt out of Nominatim with ``NOMINATIM_DISABLED``.
     """
-    fallbacks: list[Geocoder] = []
-    if not os.environ.get("NOMINATIM_DISABLED"):
-        fallbacks.append(NominatimGeocoder(timeout_s=timeout_s))
+    primaries: list[Geocoder] = []
     google_key = os.environ.get("GOOGLE_MAPS_GEOCODING_API_KEY")
     if google_key:
-        fallbacks.append(GoogleGeocoder(google_key, timeout_s=timeout_s))
+        primaries.append(GoogleGeocoder(google_key, timeout_s=timeout_s))
     mapbox_token = os.environ.get("MAPBOX_ACCESS_TOKEN")
     if mapbox_token:
-        fallbacks.append(MapboxGeocoder(mapbox_token, timeout_s=timeout_s))
-    primary = CensusGeocoder(timeout_s=timeout_s)
-    chain: Geocoder = primary if not fallbacks else ChainedGeocoder(primary, *fallbacks)
+        primaries.append(MapboxGeocoder(mapbox_token, timeout_s=timeout_s))
+
+    keyless: list[Geocoder] = [CensusGeocoder(timeout_s=timeout_s)]
+    if not os.environ.get("NOMINATIM_DISABLED"):
+        keyless.append(NominatimGeocoder(timeout_s=timeout_s))
+
+    # Paid providers first (accuracy), keyless after (free safety net).
+    ordered = [*primaries, *keyless]
+    chain: Geocoder = ordered[0] if len(ordered) == 1 else ChainedGeocoder(*ordered)
     # Cache resolved results in-process so a warm instance geocodes each address
     # at most once (across consumers), cutting keyless-provider load. Opt out with
     # GEOCODE_CACHE_DISABLED.

@@ -132,8 +132,8 @@ def test_default_geocoder_chains_census_then_nominatim_with_no_keys(monkeypatch)
     g = build_default_geocoder()
     assert isinstance(g, CachingGeocoder)  # cache wraps by default
     inner = _unwrap_cache(g)
-    # Even with no paid keys, the path is Census -> Nominatim (not a single point
-    # of failure).
+    # With no paid keys, the path is Census -> Nominatim (both keyless, not a
+    # single point of failure).
     assert isinstance(inner, ChainedGeocoder)
     assert isinstance(inner._providers[0], CensusGeocoder)
     assert isinstance(inner._providers[1], NominatimGeocoder)
@@ -149,7 +149,9 @@ def test_default_geocoder_is_pure_census_when_fallbacks_and_cache_disabled(monke
     assert isinstance(g, CensusGeocoder)
 
 
-def test_default_geocoder_adds_fallbacks_when_keys_present(monkeypatch):
+def test_paid_provider_is_primary_when_key_present(monkeypatch):
+    # Accuracy-first: a paid provider must lead so an inaccurate Census point can
+    # never short-circuit the precise result. Order = Google, Mapbox, Census, Nominatim.
     monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "gkey")
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "mtok")
     monkeypatch.delenv("NOMINATIM_DISABLED", raising=False)
@@ -157,7 +159,19 @@ def test_default_geocoder_adds_fallbacks_when_keys_present(monkeypatch):
     g = build_default_geocoder()
     inner = _unwrap_cache(g)
     assert isinstance(inner, ChainedGeocoder)
-    assert len(inner._providers) == 4  # census + nominatim + google + mapbox
+    kinds = [type(p).__name__ for p in inner._providers]
+    assert kinds == ["GoogleGeocoder", "MapboxGeocoder", "CensusGeocoder", "NominatimGeocoder"]
+
+
+def test_mapbox_is_primary_when_only_mapbox_key(monkeypatch):
+    monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
+    monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "mtok")
+    monkeypatch.delenv("NOMINATIM_DISABLED", raising=False)
+    monkeypatch.delenv("GEOCODE_CACHE_DISABLED", raising=False)
+    inner = _unwrap_cache(build_default_geocoder())
+    kinds = [type(p).__name__ for p in inner._providers]
+    assert kinds[0] == "MapboxGeocoder"  # paid provider leads
+    assert kinds == ["MapboxGeocoder", "CensusGeocoder", "NominatimGeocoder"]
 
 
 # ---- Census retry-once -----------------------------------------------------
