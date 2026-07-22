@@ -65,7 +65,7 @@ sb9_urban_lot_split) and receive, in one call:
 - Hazard and overlay findings: FEMA flood, CAL FIRE fire hazard severity
   zone, historic preservation overlay, hillside, and more - with "no hit"
   explicitly distinguished from "source unavailable".
-- An approximate conceptual buildable envelope (Los Angeles v1 only),
+- An approximate conceptual buildable envelope for any matched parcel,
   clearly labeled approximate, with assumptions and limitations spelled out.
 - A feasibility_status of likely_feasible, likely_constrained,
   needs_professional_review, or insufficient_data - never "approved",

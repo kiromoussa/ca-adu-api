@@ -301,6 +301,43 @@ def test_envelope_emits_value_and_orientation_limitation():
     assert outcome.feasibility_status == "needs_professional_review"
 
 
+def test_envelope_is_available_for_non_la_jurisdiction():
+    # The envelope is not city-specific: any production jurisdiction with a
+    # matched parcel and a side/rear setback gets the same approximate envelope.
+    import dataclasses
+
+    buffered = BufferedArea(
+        available=True, buffered_area_sqm=400.0, orientation_known=False,
+        inset_m=1.2192, source=fakes.matched_parcel().source,
+    )
+    oakland = dataclasses.replace(
+        fakes.la_jurisdiction("production"), slug="oakland", name="Oakland",
+        display_name="City of Oakland",
+    )
+    repo = fakes.FakeRepository(
+        jurisdiction=oakland,
+        parcel=fakes.matched_parcel(),
+        zoning=fakes.r1_zoning(),
+        overlays=[OverlayResult("flood", "no_hit"), OverlayResult("fire", "no_hit")],
+        ruleset=_compliant_r1_ruleset(),
+        buffered=buffered,
+    )
+    outcome = run_feasibility(
+        repo, _geocoder(), _input(options={"include_envelope": True}), consumer_id="c_1"
+    )
+    model = FeasibilityResponse.model_validate(outcome.result)
+    assert model.coverage.jurisdiction_slug == "oakland"
+    env = model.approximate_envelope
+    assert env is not None and env.available is True  # envelope emitted for Oakland
+    assert env.buildable_area_sqft is not None and env.buildable_area_sqft.value > 0
+    # No "LA only" limitation exists anymore.
+    assert not any(
+        lim.code == "envelope_unsupported_city" for lim in model.limitations
+    )
+    # Still honestly flags the uniform-setback approximation.
+    assert any(lim.code == "envelope_orientation_unknown" for lim in model.limitations)
+
+
 def test_cross_zone_ambiguity_forces_review():
     from services.core.repository import ZoneMatch, ZoningResult
 

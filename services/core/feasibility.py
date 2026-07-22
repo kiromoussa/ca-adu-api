@@ -8,7 +8,7 @@
     D. zoning lookup + cross-zone ambiguity                  (repo)
     E. overlay/hazard intersection (hit / no_hit / unavailable)
     F. rule engine + state-baseline validation               (rules)
-    G. approximate envelope (LA v1 only)                     (spatial)
+    G. approximate envelope (all jurisdictions, on request)  (spatial)
 
 It then selects a terminal ``feasibility_status`` deterministically, assembles a
 dict that validates against the OpenAPI ``FeasibilityResponse`` schema, computes
@@ -762,11 +762,16 @@ def run_feasibility(
         }
     ]
 
-    # --- Step G: approximate envelope (LA v1 only, on request) -------------
+    # --- Step G: approximate envelope (all jurisdictions, on request) ------
+    # The envelope is a uniform inward setback buffer of the parcel polygon. It
+    # depends only on (a) a matched parcel geometry and (b) a side/rear setback -
+    # both available in every production jurisdiction - so it is not city-specific.
+    # It is always a labeled approximation (edge orientation front/side/rear is
+    # unknown), disclosed via the envelope_orientation_unknown limitation.
     envelope_block: Optional[dict[str, Any]] = None
     orientation_unknown = False
     want_envelope = bool(options.get("include_envelope"))
-    if want_envelope and juris.slug == "los_angeles" and parcel.matched and parcel.id:
+    if want_envelope and parcel.matched and parcel.id:
         side_f = findings_by_field.get("side_rear_setback_min_ft")
         side_val = _num(side_f.value) if side_f else None
         inset_ft = choose_uniform_inset_ft(side_val, side_val, None)
@@ -797,12 +802,12 @@ def run_feasibility(
                     "professional review.",
                 }
             )
-    elif want_envelope and juris.slug != "los_angeles":
+    elif want_envelope and not parcel.matched:
         limitations.append(
             {
-                "code": "envelope_unsupported_city",
-                "text": "Approximate envelopes are supported for Los Angeles only "
-                "in v1.",
+                "code": "envelope_unavailable_no_parcel",
+                "text": "An approximate envelope requires a matched parcel geometry, "
+                "which was not resolved for this address.",
             }
         )
 

@@ -681,7 +681,7 @@ components:
               nullable: true
             include_envelope:
               type: boolean
-              description: Request an approximate conceptual envelope (LA v1 only).
+              description: Request an approximate conceptual envelope (any matched parcel).
               nullable: true
           additionalProperties: false
           nullable: true
@@ -847,7 +847,7 @@ components:
           $ref: '#/components/schemas/Provenance'
     ApproximateEnvelope:
       type: object
-      description: Approximate conceptual buildable envelope. Available for Los Angeles v1 only. Explicitly
+      description: Approximate conceptual buildable envelope. Available for any matched parcel. Explicitly
         labeled approximate. If parcel orientation (front/side/rear) is unknown, this is downgraded to
         a limitation rather than reporting false precision. Never asserts easements, slopes, utilities,
         trees, HOA, title, or survey facts.
