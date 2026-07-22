@@ -163,12 +163,17 @@ class CensusGeocoder:
             "benchmark": self._benchmark,
             "format": "json",
         }
-        # Census is the keyless primary; a transient failure (network / timeout /
-        # 5xx) is retried ONCE before we degrade. A successful-but-empty response
-        # is a genuine no-match and is not retried.
+        # Census is the keyless primary. Transient failures (network / timeout /
+        # 5xx / throttling under burst) are retried with exponential backoff
+        # before we degrade, since the free Census service can rate-limit rapid
+        # calls from one IP. A successful-but-empty response is a genuine no-match
+        # and is not retried. For sustained volume, configure a paid fallback
+        # geocoder (GOOGLE_MAPS_GEOCODING_API_KEY / MAPBOX_ACCESS_TOKEN).
+        import time as _time
+
         payload = None
         last_error = True
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 resp = httpx.get(self.ENDPOINT, params=params, timeout=self._timeout_s)
                 resp.raise_for_status()
@@ -177,6 +182,8 @@ class CensusGeocoder:
                 break
             except Exception:
                 last_error = True
+                if attempt < 2:
+                    _time.sleep(0.6 * (2 ** attempt))  # 0.6s, 1.2s backoff
                 continue
         if last_error or payload is None:
             return GeocodeResult(
