@@ -35,7 +35,7 @@ jurisdictions:
     county: Los Angeles
     publisher_type: american_legal
     official_code_url: https://codelibrary.amlegal.com/codes/los_angeles/latest/lamc/0-0-0-422835
-    coverage_status: ingesting
+    coverage_status: production
     source_keys:
       - lamc_amlegal
       - la_zimas_parcels
@@ -62,7 +62,7 @@ jurisdictions:
     county: San Diego
     publisher_type: american_legal
     official_code_url: https://docs.sandiego.gov/municode/MuniCodeChapter14/Ch14Art03Division01.pdf
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - sandiego_amlegal
       - fema_nfhl
@@ -84,7 +84,7 @@ jurisdictions:
     county: Santa Clara
     publisher_type: municode
     official_code_url: https://library.municode.com/ca/san_jose/codes/code_of_ordinances?nodeId=TIT20ZO
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - sanjose_municode
       - fema_nfhl
@@ -106,7 +106,7 @@ jurisdictions:
     county: San Francisco
     publisher_type: american_legal
     official_code_url: https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - sf_amlegal
       - fema_nfhl
@@ -128,7 +128,7 @@ jurisdictions:
     county: Sacramento
     publisher_type: american_legal
     official_code_url: https://codelibrary.amlegal.com/codes/sacramento/latest/sacramento_ca/
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - sacramento_amlegal
       - fema_nfhl
@@ -150,7 +150,7 @@ jurisdictions:
     county: Orange
     publisher_type: municode
     official_code_url: https://library.municode.com/ca/irvine/codes/code_of_ordinances
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - irvine_municode
       - fema_nfhl
@@ -172,7 +172,7 @@ jurisdictions:
     county: Los Angeles
     publisher_type: municode
     official_code_url: https://library.municode.com/ca/long_beach/codes/municipal_code?nodeId=TIT21ZOREGU
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - longbeach_municode
       - fema_nfhl
@@ -194,7 +194,7 @@ jurisdictions:
     county: Alameda
     publisher_type: municode
     official_code_url: https://library.municode.com/ca/oakland/codes/planning_code
-    coverage_status: planned
+    coverage_status: production
     source_keys:
       - oakland_municode
       - fema_nfhl

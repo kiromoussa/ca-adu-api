@@ -73,7 +73,7 @@ const PHASES = [
     label: "Today - live",
     dot: "bg-ok",
     text: "text-ok",
-    sub: "Shipping in Los Angeles.",
+    sub: "8 California cities, verified end-to-end.",
     items: ["detached ADU", "attached ADU", "garage conversion", "JADU", "SB 9 duplex", "SB 9 lot split"],
   },
   {
@@ -292,11 +292,12 @@ export default function HomePage() {
       </Section>
 
       {/* Coverage */}
-      <Section eyebrow="Coverage" title="Los Angeles is live. The rest are honest.">
+      <Section eyebrow="Coverage" title="Eight California cities live. Every claim verified.">
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
           <p className="max-w-measure text-muted">
             A jurisdiction is marked live only after its source registry, GIS
-            layers, and rule set are ingested, tested, and verified. Right now{" "}
+            layers, and rule set are ingested, tested, and verified against a
+            real address. Right now{" "}
             <span className="font-mono text-ink">{counts.production ?? 0}</span>{" "}
             live,{" "}
             <span className="font-mono text-ink">{counts.ingesting ?? 0}</span>{" "}

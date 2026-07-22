@@ -26,7 +26,7 @@ export default function CoveragePage() {
     <div className="mx-auto max-w-content px-6 py-16">
       <p className="eyebrow">Coverage</p>
       <h1 className="mt-3 text-3xl font-bold tracking-tightest sm:text-4xl">
-        Los Angeles is live. The rest are honest.
+        Eight California cities live. Every claim verified.
       </h1>
       <p className="mt-4 max-w-measure leading-relaxed text-muted">
         Coverage is generated directly from the jurisdiction registry that
