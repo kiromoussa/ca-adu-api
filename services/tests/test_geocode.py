@@ -12,6 +12,7 @@ from __future__ import annotations
 import httpx
 
 from services.core.geocode import (
+    CachingGeocoder,
     CensusGeocoder,
     ChainedGeocoder,
     GeocodeResult,
@@ -89,24 +90,61 @@ def test_chain_returns_primary_when_none_resolve_and_never_fabricates():
     assert out.point is None  # no fabricated point
 
 
+# ---- CachingGeocoder -------------------------------------------------------
+def test_caching_geocoder_serves_resolved_from_cache():
+    inner = _Fake(_resolved())
+    g = CachingGeocoder(inner)
+    a = g.geocode(ADDR)
+    b = g.geocode(ADDR)  # second call served from cache
+    assert a.resolved and b.resolved
+    assert inner.calls == 1  # underlying geocoder hit only once
+
+
+def test_caching_geocoder_does_not_cache_unresolved():
+    inner = _Fake(_unresolved())
+    g = CachingGeocoder(inner)
+    g.geocode(ADDR)
+    g.geocode(ADDR)  # retried, not served from cache
+    assert inner.calls == 2  # a transient failure is never stuck in cache
+
+
+def test_caching_geocoder_evicts_when_full():
+    inner = _Fake(_resolved())
+    g = CachingGeocoder(inner, max_entries=1)
+    g.geocode("addr one")
+    g.geocode("addr two")  # evicts "addr one"
+    inner.calls = 0
+    g.geocode("addr one")  # was evicted -> re-fetched
+    assert inner.calls == 1
+
+
 # ---- build_default_geocoder (env-driven) ----------------------------------
+def _unwrap_cache(g):
+    """Peel the default CachingGeocoder wrapper to assert on the inner chain."""
+    return g._inner if isinstance(g, CachingGeocoder) else g
+
+
 def test_default_geocoder_chains_census_then_nominatim_with_no_keys(monkeypatch):
     monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
     monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
     monkeypatch.delenv("NOMINATIM_DISABLED", raising=False)
+    monkeypatch.delenv("GEOCODE_CACHE_DISABLED", raising=False)
     g = build_default_geocoder()
+    assert isinstance(g, CachingGeocoder)  # cache wraps by default
+    inner = _unwrap_cache(g)
     # Even with no paid keys, the path is Census -> Nominatim (not a single point
     # of failure).
-    assert isinstance(g, ChainedGeocoder)
-    assert isinstance(g._providers[0], CensusGeocoder)
-    assert isinstance(g._providers[1], NominatimGeocoder)
-    assert len(g._providers) == 2
+    assert isinstance(inner, ChainedGeocoder)
+    assert isinstance(inner._providers[0], CensusGeocoder)
+    assert isinstance(inner._providers[1], NominatimGeocoder)
+    assert len(inner._providers) == 2
 
 
-def test_default_geocoder_is_pure_census_when_nominatim_disabled(monkeypatch):
+def test_default_geocoder_is_pure_census_when_fallbacks_and_cache_disabled(monkeypatch):
     monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
     monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
     monkeypatch.setenv("NOMINATIM_DISABLED", "1")
+    monkeypatch.setenv("GEOCODE_CACHE_DISABLED", "1")
     g = build_default_geocoder()
     assert isinstance(g, CensusGeocoder)
 
@@ -115,9 +153,11 @@ def test_default_geocoder_adds_fallbacks_when_keys_present(monkeypatch):
     monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "gkey")
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "mtok")
     monkeypatch.delenv("NOMINATIM_DISABLED", raising=False)
+    monkeypatch.delenv("GEOCODE_CACHE_DISABLED", raising=False)
     g = build_default_geocoder()
-    assert isinstance(g, ChainedGeocoder)
-    assert len(g._providers) == 4  # census + nominatim + google + mapbox
+    inner = _unwrap_cache(g)
+    assert isinstance(inner, ChainedGeocoder)
+    assert len(inner._providers) == 4  # census + nominatim + google + mapbox
 
 
 # ---- Census retry-once -----------------------------------------------------

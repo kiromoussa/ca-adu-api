@@ -487,6 +487,41 @@ class ChainedGeocoder:
         return first
 
 
+class CachingGeocoder:
+    """Wrap a geocoder with a bounded in-process cache of resolved results.
+
+    Geocoding is the request path's least-reliable step: the keyless providers
+    (Census, Nominatim) throttle or return empty under load. Caching a successful
+    resolution means an address is geocoded at most once per warm instance, across
+    all consumers, so repeat traffic (the common case for a stable address set like
+    FirstPass) never re-hits the geocoder - and total keyless-provider volume drops
+    sharply, which is what trips their rate limits in the first place.
+
+    Only RESOLVED results are cached (a failed/low-confidence result is retried on
+    the next request, so a transient outage does not get stuck). The cache is
+    per-process and bounded (simple FIFO eviction); it is not a substitute for the
+    durable 24h analysis cache, just a cheap resilience layer in front of it.
+    """
+
+    def __init__(self, inner: "Geocoder", *, max_entries: int = 5000):
+        self._inner = inner
+        self._max = max_entries
+        self._cache: "dict[str, GeocodeResult]" = {}
+
+    def geocode(self, address: str) -> GeocodeResult:
+        key = normalize_address(address) or address
+        hit = self._cache.get(key)
+        if hit is not None:
+            return hit
+        result = self._inner.geocode(address)
+        if result.resolved:
+            if len(self._cache) >= self._max:
+                # FIFO eviction: drop the oldest inserted key.
+                self._cache.pop(next(iter(self._cache)), None)
+            self._cache[key] = result
+        return result
+
+
 def build_default_geocoder(*, timeout_s: float = 8.0) -> "Geocoder":
     """Build the request-path geocoder chain.
 
@@ -507,9 +542,13 @@ def build_default_geocoder(*, timeout_s: float = 8.0) -> "Geocoder":
     if mapbox_token:
         fallbacks.append(MapboxGeocoder(mapbox_token, timeout_s=timeout_s))
     primary = CensusGeocoder(timeout_s=timeout_s)
-    if not fallbacks:
-        return primary
-    return ChainedGeocoder(primary, *fallbacks)
+    chain: Geocoder = primary if not fallbacks else ChainedGeocoder(primary, *fallbacks)
+    # Cache resolved results in-process so a warm instance geocodes each address
+    # at most once (across consumers), cutting keyless-provider load. Opt out with
+    # GEOCODE_CACHE_DISABLED.
+    if os.environ.get("GEOCODE_CACHE_DISABLED"):
+        return chain
+    return CachingGeocoder(chain)
 
 
 class StaticGeocoder:
