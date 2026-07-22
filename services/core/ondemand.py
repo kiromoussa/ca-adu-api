@@ -266,6 +266,25 @@ _IRV_LAYERS = JurisdictionLayers(
     overlays=(FLOOD_LAYER,),
 )
 
+# Oakland v8: City of Oakland ArcGIS Online org (Esri cloud, Render-reachable),
+# live-verified. Parcels = Alameda County (AC_Parcels2020), zoning = Base Zones.
+_OAK_LAYERS = JurisdictionLayers(
+    slug="oakland",
+    parcel=LayerConfig(
+        name="Oakland/Alameda County parcels (AC_Parcels2020/0)",
+        query_url="https://services.arcgis.com/9tC74aDHuml0x5Yz/arcgis/rest/services/AC_Parcels2020/FeatureServer/0/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="AC_Parcels2020/0",
+        apn_fields=("APN_AIR", "PRINTPARCEL", "APN_GROUND"), situs_fields=(),
+    ),
+    zoning=LayerConfig(
+        name="Oakland Base Zones (Zoning_Group_Layers_/0)",
+        query_url="https://services.arcgis.com/9tC74aDHuml0x5Yz/arcgis/rest/services/Zoning_Group_Layers_/FeatureServer/0/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="Zoning_Group_Layers_/0",
+        zone_code_fields=("BASEZONE",), zone_name_fields=("BASEZONE",),
+    ),
+    overlays=(FLOOD_LAYER,),
+)
+
 JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
     _LA_SLUG: _LA_LAYERS,
     "san_diego": _SD_LAYERS,
@@ -274,6 +293,7 @@ JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
     "sacramento": _SAC_LAYERS,
     "long_beach": _LB_LAYERS,
     "irvine": _IRV_LAYERS,
+    "oakland": _OAK_LAYERS,
 }
 
 
