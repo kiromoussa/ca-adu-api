@@ -254,12 +254,14 @@ _IRV_LAYERS = JurisdictionLayers(
         query_url="https://gis.cityofirvine.org/arcgis/rest/services/OnlineParcel/MapServer/4/query",
         provider="arcgis", source_type="gis_parcel", layer_name="OnlineParcel/4",
         apn_fields=("APN",), situs_fields=(),
+        timeout_s=20.0,  # cityofirvine.org is higher-latency from Render than the 6s default allows.
     ),
     zoning=LayerConfig(
         name="Irvine Zoning (OnlineParcel/7)",
         query_url="https://gis.cityofirvine.org/arcgis/rest/services/OnlineParcel/MapServer/7/query",
         provider="arcgis", source_type="gis_zoning", layer_name="OnlineParcel/7",
         zone_code_fields=("ZONING",), zone_name_fields=("DESCRIPTION", "ZONING"),
+        timeout_s=20.0,
     ),
     overlays=(FLOOD_LAYER,),
 )
