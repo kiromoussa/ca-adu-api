@@ -154,7 +154,9 @@ def test_disabled_resolver_is_a_noop():
 
 
 def test_out_of_scope_jurisdiction_is_skipped():
-    db = FakeDB(slug="san_diego")
+    # A jurisdiction with no on-demand layers configured (not one of the 8
+    # production cities) is skipped, never queried against another city's services.
+    db = FakeDB(slug="fresno")
     fetch = make_fetch(_all_features())
     r = OnDemandResolver(db, enabled=True, fetch=fetch)
     out = r.hydrate_point("jid-1", LA_POINT)
@@ -233,8 +235,12 @@ def test_la_layers_are_registered_and_unknown_city_is_unconfigured():
     assert la.parcel is PARCEL_LAYER
     assert la.zoning is ZONING_LAYER
     assert FLOOD_LAYER in la.overlays
-    # An un-onboarded city has no configured layers (coverage honesty).
-    assert get_jurisdiction_layers("san_diego") is None
+    # The 8 onboarded production cities are configured...
+    for slug in ("san_diego", "san_jose", "san_francisco", "sacramento",
+                 "long_beach", "irvine", "oakland"):
+        assert get_jurisdiction_layers(slug) is not None
+    # ...while an un-onboarded city has no configured layers (coverage honesty).
+    assert get_jurisdiction_layers("fresno") is None
     assert get_jurisdiction_layers(None) is None
 
 

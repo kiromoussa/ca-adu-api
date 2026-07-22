@@ -135,7 +135,7 @@ def test_census_gives_up_after_retry_without_fabricating(monkeypatch):
 
     monkeypatch.setattr(httpx, "get", always_fail)
     out = CensusGeocoder().geocode(ADDR)
-    assert calls["n"] == 2  # attempted twice, then degraded
+    assert calls["n"] == 3  # 3 attempts with exponential backoff, then degraded
     assert out.point is None and out.confidence == "low"
     assert out.source.data_status == "unavailable"
 
