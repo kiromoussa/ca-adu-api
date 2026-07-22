@@ -231,12 +231,47 @@ _SAC_LAYERS = JurisdictionLayers(
     overlays=(FLOOD_LAYER,),
 )
 
+# Long Beach v6: Long Beach is in LA County, so the LA County Assessor parcel
+# service (with situs) is reused; zoning is the City of Long Beach FeatureServer.
+_LB_LAYERS = JurisdictionLayers(
+    slug="long_beach",
+    parcel=PARCEL_LAYER,  # LA County Assessor cache (APN + SitusFullAddress); LB is in LA County.
+    zoning=LayerConfig(
+        name="Long Beach Zoning (FeatureServer/0)",
+        query_url="https://services6.arcgis.com/yCArG7wGXGyWLqav/arcgis/rest/services/Zoning/FeatureServer/0/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="LB Zoning/0",
+        zone_code_fields=("ZONING_SYMBOL",), zone_name_fields=("ZONING_SYMBOL",),
+    ),
+    overlays=(FLOOD_LAYER,),
+)
+
+# Irvine v7: City of Irvine OnlineParcel services; zoning uses master-plan /
+# planning-area codes (ZONING e.g. "2.2", DESCRIPTION "Low Density Residential").
+_IRV_LAYERS = JurisdictionLayers(
+    slug="irvine",
+    parcel=LayerConfig(
+        name="Irvine parcels (OnlineParcel/4)",
+        query_url="https://gis.cityofirvine.org/arcgis/rest/services/OnlineParcel/MapServer/4/query",
+        provider="arcgis", source_type="gis_parcel", layer_name="OnlineParcel/4",
+        apn_fields=("APN",), situs_fields=(),
+    ),
+    zoning=LayerConfig(
+        name="Irvine Zoning (OnlineParcel/7)",
+        query_url="https://gis.cityofirvine.org/arcgis/rest/services/OnlineParcel/MapServer/7/query",
+        provider="arcgis", source_type="gis_zoning", layer_name="OnlineParcel/7",
+        zone_code_fields=("ZONING",), zone_name_fields=("DESCRIPTION", "ZONING"),
+    ),
+    overlays=(FLOOD_LAYER,),
+)
+
 JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
     _LA_SLUG: _LA_LAYERS,
     "san_diego": _SD_LAYERS,
     "san_jose": _SJ_LAYERS,
     "san_francisco": _SF_LAYERS,
     "sacramento": _SAC_LAYERS,
+    "long_beach": _LB_LAYERS,
+    "irvine": _IRV_LAYERS,
 }
 
 
