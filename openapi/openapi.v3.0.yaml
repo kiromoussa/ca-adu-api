@@ -23,8 +23,10 @@ info:
     response.
 
 
-    Coverage: Los Angeles City is the v1 target. Other California cities are registered but return unsupported_coverage
-    until their sources, GIS layers, and rule sets are ingested, tested, and marked production-ready.
+    Coverage: eight California cities are live and billable - Los Angeles, San Diego, San Jose, San Francisco,
+    Sacramento, Long Beach, Irvine, and Oakland - each verified end-to-end before being marked production. Other
+    California cities are registered but return unsupported_coverage until their sources, GIS layers, and rule
+    sets are ingested, tested, and verified. Call GET /jurisdictions for live status.
 
     '
   contact:

@@ -83,13 +83,15 @@ architectural, surveying, engineering, title, environmental, or permit
 advice. Verify all results with the applicable jurisdiction and qualified
 professionals before making decisions or spending money."
 
-Coverage, honestly stated: Los Angeles City is live today and the only
-jurisdiction whose feasibility calls are billable. San Diego, San Jose,
-San Francisco, Sacramento, Irvine, Long Beach, and Oakland are registered
-and visible via GET /jurisdictions, but return unsupported_coverage (and
-are not billed) until each city's sources, GIS layers, and rule set are
-ingested, tested, and marked production-ready. Call GET /jurisdictions at
-request time for live status - never hardcode which cities are covered.
+Coverage, honestly stated: eight California cities are live and billable
+today - Los Angeles, San Diego, San Jose, San Francisco, Sacramento, Long
+Beach, Irvine, and Oakland - each verified end-to-end against a real address
+before being marked production. A city is marked production only after its
+sources, GIS layers, and rule set are ingested, tested, and verified; other
+jurisdictions are registered and visible via GET /jurisdictions but return
+unsupported_coverage (and are not billed) until they clear that bar. Call
+GET /jurisdictions at request time for live status - never hardcode which
+cities are covered.
 
 Built for PropTech platforms, architects, real estate and lending
 workflows, and AI agents that need a fast, structured, citable answer
