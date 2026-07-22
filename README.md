@@ -53,17 +53,23 @@ product that is non-negotiable.
   `possibly_more_restrictive_than_state_baseline` - the local source is
   always preserved, never silently discarded or overridden.
 
-## Coverage honesty: Los Angeles first
+## Coverage honesty: eight California cities live
 
-Los Angeles City is the v1 target and the only jurisdiction eligible to
-return a billable feasibility result. San Diego, San Jose, San Francisco,
-Sacramento, Irvine, Long Beach, and Oakland are registered
-(`config/jurisdictions.yaml`) so integrations can be built against them
-ahead of time, but each returns `coverage_status: planned` (or `ingesting`)
-and a `422 unsupported_coverage` response - never billed - until its source
-registry, GIS layers, and rule set are ingested, tested, and verified as
-`production`. `GET /v1/jurisdictions` is the live source of truth; nothing
-in this API or its docs hardcodes which cities are "done".
+Eight California cities are `production` and billable: Los Angeles, San
+Diego, San Jose, San Francisco, Sacramento, Long Beach, Irvine, and Oakland.
+Each was verified end-to-end against a real address (parcel + zoning + a
+source-cited feasibility result) before being marked `production`. A
+jurisdiction reaches `production` only after its source registry, GIS
+layers, and rule set are ingested, tested, and verified; any other
+registered jurisdiction returns a `422 unsupported_coverage` response -
+never billed - until it clears that bar.
+
+`GET /v1/jurisdictions` is the live source of truth; nothing in this API or
+its docs hardcodes which cities are "done". Resolution uses an accuracy-first
+geocoder chain (a paid provider first when configured, then Census and
+OpenStreetMap Nominatim) and on-demand ArcGIS parcel/zoning resolution with a
+nearest-parcel tolerance and bounded retries, so any address in a covered
+city resolves without bulk ingest.
 
 ## API at a glance
 
@@ -154,7 +160,7 @@ make api-dev
 # ... or build and run the same thing in Docker:
 docker compose up --build api
 
-# Run the ingestion pipeline for Los Angeles (the v1 target jurisdiction).
+# Run the legacy municipal-code ingestion pipeline for Los Angeles.
 make ingest-la
 
 # Run the test suites (services/core + services/api + ingestion, then the portal).
