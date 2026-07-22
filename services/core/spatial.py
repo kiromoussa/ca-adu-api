@@ -15,10 +15,20 @@ What lives here is the deterministic, network-free glue:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
 from .repository import BufferedArea, SourceRef
+
+
+def _env_float_module(name: str, default: float) -> float:
+    """Read a float from the environment, falling back to default on any error."""
+    try:
+        raw = os.environ.get(name)
+        return float(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
 
 # International foot definition (exact). 1 ft == 0.3048 m, 1 m == 1/0.3048 ft.
 FEET_PER_METER = 1.0 / 0.3048            # ~= 3.280839895
@@ -26,10 +36,16 @@ METERS_PER_FOOT = 0.3048                 # exact
 SQFT_PER_SQM = FEET_PER_METER ** 2       # ~= 10.76391041671
 SQM_PER_SQFT = METERS_PER_FOOT ** 2      # ~= 0.09290304
 
-# Documented default spatial tolerance for parcel matching. ST_Contains is tried
-# first; ST_Intersects with this buffer is the documented fallback for points
-# that land on a shared parcel boundary or just outside due to geocoder jitter.
-DEFAULT_PARCEL_TOLERANCE_M = 5.0
+# Default spatial tolerance for parcel matching. ST_Contains is tried first; the
+# ST_DWithin fallback (nearest parcel within this radius, ordered by distance)
+# handles the common case where an address geocodes to the street centerline /
+# right-of-way rather than onto the parcel polygon. Measured need: interpolated
+# geocodes land ~8-20 m off the nearest parcel (street half-width + setback), so
+# 5 m was far too small and produced spurious parcel_unmatched results in cities
+# with wider streets (e.g. San Jose). 25 m comfortably covers the ROW case while
+# the distance ordering still selects the correct (nearest) parcel, so it does not
+# reach across an arterial to the wrong block. Override with PARCEL_TOLERANCE_M.
+DEFAULT_PARCEL_TOLERANCE_M = _env_float_module("PARCEL_TOLERANCE_M", 25.0)
 
 # Envelope label, verbatim per the OpenAPI ApproximateEnvelope.label default.
 ENVELOPE_LABEL = "approximate conceptual envelope"
