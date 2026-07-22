@@ -228,6 +228,45 @@ def test_empty_feature_set_is_a_clean_no_hit():
     assert out["parcel"] == 0 and out["zoning"] == 0 and out["flood"] == 0
 
 
+def test_transient_fetch_error_is_retried_then_succeeds(monkeypatch):
+    # A flaky upstream (e.g. cityofirvine.org) throws once, then returns data.
+    # The bounded retry must recover the parcel rather than degrading.
+    import services.core.ondemand as _ond
+    monkeypatch.setattr(_ond.time, "sleep", lambda *_: None)  # no real backoff wait
+    db = FakeDB()
+    state = {"parcel_calls": 0}
+    parcel_url = get_jurisdiction_layers("los_angeles").parcel.query_url
+
+    def flaky(url, params, *, verify, timeout):
+        if url == parcel_url:
+            state["parcel_calls"] += 1
+            if state["parcel_calls"] == 1:
+                raise RuntimeError("connection reset")  # transient, first attempt
+            return 200, b'{"features":[]}', [_parcel_feature()]
+        return 200, b'{"features":[]}', []
+
+    r = OnDemandResolver(db, enabled=True, fetch=flaky)  # default 2 attempts
+    out = r.hydrate_point("jid-1", LA_POINT)
+    assert state["parcel_calls"] == 2  # retried once after the transient error
+    assert out["parcel"] == 1  # parcel recovered on the retry
+
+
+def test_clean_empty_response_is_not_retried():
+    # A clean empty feature set is a legitimate no-data answer, never retried.
+    db = FakeDB()
+    calls = {"parcel_calls": 0}
+    parcel_url = get_jurisdiction_layers("los_angeles").parcel.query_url
+
+    def empty(url, params, *, verify, timeout):
+        if url == parcel_url:
+            calls["parcel_calls"] += 1
+        return 200, b'{"features":[]}', []
+
+    r = OnDemandResolver(db, enabled=True, fetch=empty)
+    r.hydrate_point("jid-1", LA_POINT)
+    assert calls["parcel_calls"] == 1  # no retry on a clean empty result
+
+
 # ---- Multi-jurisdiction layer resolution ----------------------------------
 def test_la_layers_are_registered_and_unknown_city_is_unconfigured():
     la = get_jurisdiction_layers("los_angeles")

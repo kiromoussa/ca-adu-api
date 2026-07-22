@@ -538,6 +538,11 @@ class OnDemandResolver:
         self.enabled = _env_bool("ONDEMAND_ENABLED", True) if enabled is None else enabled
         self.timeout_s = _env_float("ONDEMAND_TIMEOUT_S", 6.0) if timeout_s is None else timeout_s
         self.radius_m = _env_float("ONDEMAND_ENVELOPE_M", 120.0) if radius_m is None else radius_m
+        # Bounded retry for transient upstream failures (timeout / reset / empty
+        # body). Some official ArcGIS endpoints are flaky under load (e.g.
+        # cityofirvine.org), so one retry materially improves resolution without
+        # masking a genuine no-data response (only EXCEPTIONS are retried).
+        self.max_fetch_attempts = int(_env_float("ONDEMAND_FETCH_ATTEMPTS", 2.0))
         self._memo_ttl = memo_ttl_s
         self._fetch_fn: Fetcher = fetch or _default_fetch
         self._now = now
@@ -592,19 +597,27 @@ class OnDemandResolver:
     # -- fetch --------------------------------------------------------------
     def _fetch(self, layer: LayerConfig, point: GeoPoint) -> FetchResult:
         params = arcgis_query_params(point, self.radius_m)
-        try:
-            status_code, content, features = self._fetch_fn(
-                layer.query_url, params, verify=layer.verify_ssl,
-                timeout=layer.timeout_s or self.timeout_s,
-            )
-            return FetchResult(
-                ok=True,
-                status_code=status_code,
-                content=content,
-                features=list(features or []),
-            )
-        except Exception as exc:  # network error / timeout / bad payload
-            return FetchResult(ok=False, error=str(exc))
+        attempts = max(1, self.max_fetch_attempts)
+        last_err = ""
+        for attempt in range(attempts):
+            try:
+                status_code, content, features = self._fetch_fn(
+                    layer.query_url, params, verify=layer.verify_ssl,
+                    timeout=layer.timeout_s or self.timeout_s,
+                )
+                return FetchResult(
+                    ok=True,
+                    status_code=status_code,
+                    content=content,
+                    features=list(features or []),
+                )
+            except Exception as exc:  # network error / timeout / bad payload
+                # Only exceptions are retried; a clean empty feature set is a
+                # legitimate "no data here" and returns ok=True above.
+                last_err = str(exc)
+                if attempt < attempts - 1:
+                    time.sleep(0.5 * (2 ** attempt))  # 0.5s, then 1s
+        return FetchResult(ok=False, error=last_err)
 
     # -- provenance ---------------------------------------------------------
     def _ensure_registry(self, layer: LayerConfig, jurisdiction_id: Optional[str]) -> Optional[str]:
