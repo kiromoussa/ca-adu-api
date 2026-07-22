@@ -17,6 +17,7 @@ from services.core.geocode import (
     GeocodeResult,
     GoogleGeocoder,
     MapboxGeocoder,
+    NominatimGeocoder,
     build_default_geocoder,
 )
 from services.core.repository import GeoPoint, SourceRef
@@ -89,9 +90,23 @@ def test_chain_returns_primary_when_none_resolve_and_never_fabricates():
 
 
 # ---- build_default_geocoder (env-driven) ----------------------------------
-def test_default_geocoder_is_census_with_no_keys(monkeypatch):
+def test_default_geocoder_chains_census_then_nominatim_with_no_keys(monkeypatch):
     monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
     monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("NOMINATIM_DISABLED", raising=False)
+    g = build_default_geocoder()
+    # Even with no paid keys, the path is Census -> Nominatim (not a single point
+    # of failure).
+    assert isinstance(g, ChainedGeocoder)
+    assert isinstance(g._providers[0], CensusGeocoder)
+    assert isinstance(g._providers[1], NominatimGeocoder)
+    assert len(g._providers) == 2
+
+
+def test_default_geocoder_is_pure_census_when_nominatim_disabled(monkeypatch):
+    monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
+    monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("NOMINATIM_DISABLED", "1")
     g = build_default_geocoder()
     assert isinstance(g, CensusGeocoder)
 
@@ -99,9 +114,10 @@ def test_default_geocoder_is_census_with_no_keys(monkeypatch):
 def test_default_geocoder_adds_fallbacks_when_keys_present(monkeypatch):
     monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "gkey")
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "mtok")
+    monkeypatch.delenv("NOMINATIM_DISABLED", raising=False)
     g = build_default_geocoder()
     assert isinstance(g, ChainedGeocoder)
-    assert len(g._providers) == 3  # census + google + mapbox
+    assert len(g._providers) == 4  # census + nominatim + google + mapbox
 
 
 # ---- Census retry-once -----------------------------------------------------
@@ -218,3 +234,50 @@ def test_mapbox_no_features_no_point(monkeypatch):
     monkeypatch.setattr(httpx, "get", _mapbox_get({"features": []}))
     out = MapboxGeocoder("t").geocode(ADDR)
     assert out.point is None
+
+
+# ---- Nominatim parsing -----------------------------------------------------
+def _nominatim_get(payload):
+    def _get(url, params=None, headers=None, timeout=None):
+        return _Resp(payload)
+    return _get
+
+
+def test_nominatim_building_is_high(monkeypatch):
+    payload = [{"lat": "32.7112", "lon": "-117.1540", "place_rank": 30,
+                "addresstype": "building", "display_name": "550 Park Blvd, San Diego"}]
+    monkeypatch.setattr(httpx, "get", _nominatim_get(payload))
+    out = NominatimGeocoder().geocode(ADDR)
+    assert out.confidence == "high" and out.resolved is True
+    assert out.point is not None
+
+
+def test_nominatim_street_level_is_medium(monkeypatch):
+    payload = [{"lat": "34.0", "lon": "-118.0", "place_rank": 26,
+                "addresstype": "road", "display_name": "Main St"}]
+    monkeypatch.setattr(httpx, "get", _nominatim_get(payload))
+    out = NominatimGeocoder().geocode(ADDR)
+    assert out.confidence == "medium" and out.resolved is True
+
+
+def test_nominatim_city_level_is_low_and_unresolved(monkeypatch):
+    payload = [{"lat": "34.0", "lon": "-118.0", "place_rank": 16,
+                "addresstype": "city", "display_name": "Los Angeles"}]
+    monkeypatch.setattr(httpx, "get", _nominatim_get(payload))
+    out = NominatimGeocoder().geocode(ADDR)
+    # Coarse match -> low -> not resolved (no false precision).
+    assert out.confidence == "low" and out.resolved is False
+
+
+def test_nominatim_empty_list_no_point(monkeypatch):
+    monkeypatch.setattr(httpx, "get", _nominatim_get([]))
+    out = NominatimGeocoder().geocode(ADDR)
+    assert out.point is None and out.confidence == "low"
+
+
+def test_nominatim_network_error_degrades_without_fabricating(monkeypatch):
+    def boom(url, params=None, headers=None, timeout=None):
+        raise httpx.ConnectError("down")
+    monkeypatch.setattr(httpx, "get", boom)
+    out = NominatimGeocoder().geocode(ADDR)
+    assert out.point is None and out.source.data_status == "unavailable"

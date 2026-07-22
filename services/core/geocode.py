@@ -373,6 +373,94 @@ class MapboxGeocoder:
         )
 
 
+class NominatimGeocoder:
+    """Keyless OpenStreetMap Nominatim geocoder (used as a fallback to Census).
+
+    Census (the keyless primary) intermittently returns empty bodies under load
+    and has US address-coverage gaps; Nominatim covers those cases at no cost and
+    with no API key, so the request path is not a single point of failure when no
+    paid geocoder key is configured. Confidence is derived from Nominatim's
+    ``place_rank`` / ``addresstype`` (a house/building match is high; a street is
+    medium; anything coarser is low). Never fabricates: a coarse or missing result
+    is low confidence, so the orchestrator degrades to ``insufficient_data``.
+
+    Note: Nominatim's usage policy caps bulk use (~1 req/s) and requires an
+    identifying User-Agent. It is a FALLBACK here (only runs when Census does not
+    resolve), so volume stays low; for heavy production traffic set a paid key
+    (GOOGLE_MAPS_GEOCODING_API_KEY / MAPBOX_ACCESS_TOKEN) instead.
+    """
+
+    ENDPOINT = "https://nominatim.openstreetmap.org/search"
+    SOURCE_TITLE = "OpenStreetMap Nominatim"
+
+    def __init__(self, *, timeout_s: float = 8.0, user_agent: Optional[str] = None):
+        self._timeout_s = timeout_s
+        self._user_agent = user_agent or os.environ.get(
+            "NOMINATIM_USER_AGENT", "ADU-Atlas-API/1.0 (+https://adu-atlas-api.onrender.com)"
+        )
+
+    def _source(self, data_status: str, confidence: str) -> SourceRef:
+        return SourceRef(
+            source_url=self.ENDPOINT,
+            source_title=self.SOURCE_TITLE,
+            source_layer="nominatim/search",
+            retrieved_at=_now(),
+            last_verified_at=_now(),
+            confidence=confidence,
+            data_status=data_status,
+        )
+
+    def geocode(self, address: str) -> GeocodeResult:
+        try:
+            import httpx
+        except Exception:  # pragma: no cover - dependency guard
+            return GeocodeResult(None, "low", None, self._source("unavailable", "low"))
+
+        params = {
+            "q": address,
+            "format": "jsonv2",
+            "limit": "1",
+            "addressdetails": "1",
+            "countrycodes": "us",
+        }
+        headers = {"User-Agent": self._user_agent}
+        try:
+            resp = httpx.get(self.ENDPOINT, params=params, headers=headers, timeout=self._timeout_s)
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception:
+            return GeocodeResult(None, "low", None, self._source("unavailable", "low"))
+
+        if not isinstance(payload, list) or not payload:
+            return GeocodeResult(None, "low", None, self._source("current", "low"))
+
+        best = payload[0]
+        try:
+            lat = float(best["lat"])
+            lon = float(best["lon"])
+        except (KeyError, TypeError, ValueError):
+            return GeocodeResult(None, "low", None, self._source("current", "low"))
+
+        # place_rank is Nominatim's specificity signal: 30 == house/building.
+        try:
+            rank = int(best.get("place_rank", 0))
+        except (TypeError, ValueError):
+            rank = 0
+        addresstype = str(best.get("addresstype") or "").lower()
+        if rank >= 30 or addresstype in ("building", "house", "address"):
+            confidence = "high"
+        elif rank >= 26:  # street / road level
+            confidence = "medium"
+        else:  # neighbourhood, city, postcode, etc. - not precise enough
+            confidence = "low"
+        return GeocodeResult(
+            point=GeoPoint(lon=lon, lat=lat),
+            confidence=confidence,
+            matched_address=best.get("display_name"),
+            source=self._source("current", confidence),
+        )
+
+
 class ChainedGeocoder:
     """Try a primary geocoder, then fall back to others until one resolves.
 
@@ -400,14 +488,18 @@ class ChainedGeocoder:
 
 
 def build_default_geocoder(*, timeout_s: float = 8.0) -> "Geocoder":
-    """Build the request-path geocoder: Census primary + optional key fallbacks.
+    """Build the request-path geocoder chain.
 
-    Census (keyless) is always primary. Google and/or Mapbox are appended as
-    fallbacks only when ``GOOGLE_MAPS_GEOCODING_API_KEY`` /
-    ``MAPBOX_ACCESS_TOKEN`` are set in the environment. With no keys this is
-    exactly the Census geocoder, so existing deployments are unchanged.
+    Census (keyless, US-gov) is primary. A keyless OpenStreetMap Nominatim
+    fallback follows so the path is not a single point of failure when Census
+    returns empty / rate-limits (unless ``NOMINATIM_DISABLED`` is set). Google
+    and/or Mapbox are appended when ``GOOGLE_MAPS_GEOCODING_API_KEY`` /
+    ``MAPBOX_ACCESS_TOKEN`` are set - the recommended geocoders for heavy
+    production traffic. Order = Census -> Nominatim -> Google -> Mapbox.
     """
     fallbacks: list[Geocoder] = []
+    if not os.environ.get("NOMINATIM_DISABLED"):
+        fallbacks.append(NominatimGeocoder(timeout_s=timeout_s))
     google_key = os.environ.get("GOOGLE_MAPS_GEOCODING_API_KEY")
     if google_key:
         fallbacks.append(GoogleGeocoder(google_key, timeout_s=timeout_s))
