@@ -231,6 +231,45 @@ def test_flood_severity_classification_unit():
     assert flood_hit_severity(OverlayResult("flood", "hit", raw_values=None)) == "info"
 
 
+# --- CAL FIRE FHSZ severity -----------------------------------------------
+def test_fire_severity_classification_unit():
+    from services.core.feasibility import fire_hit_severity
+
+    # Very High is the only "critical"; High is warning; Moderate is info.
+    vh = OverlayResult("fire", "hit", raw_values={"FHSZ_Description": "Very High"})
+    assert fire_hit_severity(vh) == "critical"
+    hi = OverlayResult("fire", "hit", raw_values={"FHSZ_Description": "High"})
+    assert fire_hit_severity(hi) == "warning"
+    mod = OverlayResult("fire", "hit", raw_values={"FHSZ_Description": "Moderate"})
+    assert fire_hit_severity(mod) == "info"
+    # Case-insensitive, and "very high" must not be misread as plain "high".
+    assert fire_hit_severity(
+        OverlayResult("fire", "hit", raw_values={"FHSZ_Description": "VERY HIGH"})
+    ) == "critical"
+    # Unknown / missing designation is never silently harmless -> warning.
+    assert fire_hit_severity(OverlayResult("fire", "hit", raw_values=None)) == "warning"
+
+
+def test_fire_very_high_sets_critical_severity_and_hazard_hit():
+    # An end-to-end check that a Very High FHSZ hit surfaces severity=critical and
+    # downgrades feasibility (hazard_hit routes away from likely_feasible).
+    repo = fakes.FakeRepository(
+        jurisdiction=fakes.la_jurisdiction("production"),
+        parcel=fakes.matched_parcel(),
+        zoning=fakes.r1_zoning(),
+        overlays=[
+            OverlayResult("flood", "no_hit"),
+            OverlayResult("fire", "hit", raw_values={"FHSZ_Description": "Very High"}),
+        ],
+        ruleset=_compliant_r1_ruleset(),
+    )
+    outcome = run_feasibility(repo, _geocoder(), _input(), consumer_id="c_1")
+    model = FeasibilityResponse.model_validate(outcome.result)
+    fire = next(f for f in model.overlay_findings if f.overlay_type == "fire")
+    assert fire.severity == "critical"
+    assert outcome.feasibility_status != "likely_feasible"  # a real hazard constrains
+
+
 def test_zone_x_flood_hit_is_info_and_does_not_constrain():
     repo = fakes.FakeRepository(
         jurisdiction=fakes.la_jurisdiction("production"),

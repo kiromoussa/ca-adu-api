@@ -87,6 +87,42 @@ def _flood_zone_token(ov: OverlayResult) -> Optional[str]:
     return str(candidate).strip().upper()
 
 
+def _fire_designation_token(ov: OverlayResult) -> Optional[str]:
+    """Extract the CAL FIRE FHSZ designation (Moderate/High/Very High)."""
+    raw = ov.raw_values or {}
+    candidate: Optional[Any] = None
+    for key in ("FHSZ_Description", "fhsz_description", "HAZ_CLASS", "designation", "FHSZ"):
+        if isinstance(raw, dict) and raw.get(key) not in (None, ""):
+            candidate = raw.get(key)
+            break
+    if candidate is None:
+        candidate = ov.description
+    if candidate is None:
+        return None
+    return str(candidate).strip().lower()
+
+
+def fire_hit_severity(ov: OverlayResult) -> str:
+    """Classify a CAL FIRE Fire Hazard Severity Zone hit.
+
+    Very High FHSZ -> ``critical`` (triggers WUI / CRC Chapter 7A ember-resistant
+    construction and the strictest defensible-space rules). High -> ``warning``.
+    Moderate -> ``info`` (mapped, but the lightest constraint). An unrecognized or
+    absent designation falls back to ``warning`` so a fire hit is never silently
+    treated as harmless.
+    """
+    token = _fire_designation_token(ov)
+    if not token:
+        return "warning"
+    if "very high" in token:
+        return "critical"
+    if "high" in token:  # "high" but not "very high" (handled above)
+        return "warning"
+    if "moderate" in token:
+        return "info"
+    return "warning"
+
+
 def flood_hit_severity(ov: OverlayResult) -> str:
     """Classify a flood overlay hit as ``warning`` (SFHA) or ``info`` (minimal).
 
@@ -708,6 +744,10 @@ def run_feasibility(
                 # Minimal-hazard flood zones (X, D, ...) are info-only and do not
                 # constrain; only true SFHAs downgrade feasibility.
                 severity = flood_hit_severity(ov)
+            elif ov.overlay_type == "fire":
+                # CAL FIRE FHSZ: Very High -> critical, High -> warning,
+                # Moderate -> info. Not a flat warning.
+                severity = fire_hit_severity(ov)
             else:
                 severity = "warning"
             if severity != "info":

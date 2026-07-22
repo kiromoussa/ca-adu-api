@@ -112,6 +112,21 @@ FLOOD_LAYER = LayerConfig(
     designation_fields=("FLD_ZONE",),
 )
 
+# CAL FIRE / OSFM statewide Fire Hazard Severity Zones (Moderate / High / Very
+# High), covering both State and Local Responsibility Areas. Statewide and shared
+# across jurisdictions like FEMA flood. The FHSZ_Description designation drives
+# fire severity (Very High -> critical, High -> warning, Moderate -> info).
+FIRE_LAYER = LayerConfig(
+    name="CAL FIRE Fire Hazard Severity Zones (FHSZ SRA+LRA)",
+    query_url="https://services1.arcgis.com/jUJYIo9tSA7EHvfZ/arcgis/rest/services/FHSZ_in_SRA_for_FHSZ_in_LRA/FeatureServer/0/query",
+    provider="cal_fire",
+    source_type="gis_overlay",
+    layer_name="FHSZ_in_SRA_for_FHSZ_in_LRA/0",
+    overlay_type="fire",
+    designation_fields=("FHSZ_Description",),
+    timeout_s=20.0,  # AGOL hosted layer; allow headroom from Render.
+)
+
 # The Los Angeles v1 jurisdiction slug (the first proven-production city).
 _LA_SLUG = "los_angeles"
 
@@ -147,7 +162,7 @@ _LA_LAYERS = JurisdictionLayers(
     slug=_LA_SLUG,
     parcel=PARCEL_LAYER,
     zoning=ZONING_LAYER,
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 # San Diego v2: City of San Diego services, live-verified (see
@@ -168,7 +183,7 @@ _SD_LAYERS = JurisdictionLayers(
         provider="arcgis", source_type="gis_zoning", layer_name="DSD/Zoning_Base/0",
         zone_code_fields=("ZONE_NAME",), zone_name_fields=("ZONE_NAME",),
     ),
-    overlays=(FLOOD_LAYER,),  # FEMA flood is federal, shared across cities.
+    overlays=(FLOOD_LAYER, FIRE_LAYER),  # FEMA flood + CAL FIRE FHSZ, shared across cities.
 )
 
 # The authoritative in-code registry. Only cities whose sources have been
@@ -189,7 +204,7 @@ _SJ_LAYERS = JurisdictionLayers(
         provider="arcgis", source_type="gis_zoning", layer_name="PLN/128",
         zone_code_fields=("ZONING", "ZONINGABBREV"), zone_name_fields=("ZONING",),
     ),
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 # San Francisco v4: SF Planning "PlanningData" services (base path /arcgiswa/),
@@ -209,7 +224,7 @@ _SF_LAYERS = JurisdictionLayers(
         provider="arcgis", source_type="gis_zoning", layer_name="PlanningData/3",
         zone_code_fields=("zoning", "zoning_sim"), zone_name_fields=("districtname", "zoning"),
     ),
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 # Sacramento v5: Sacramento County GIS (city parcels + City of Sacramento zoning),
@@ -228,7 +243,7 @@ _SAC_LAYERS = JurisdictionLayers(
         provider="arcgis", source_type="gis_zoning", layer_name="CITY_of_SACRAMENTO/3",
         zone_code_fields=("BASE_ZONE", "ZONE"), zone_name_fields=("DESCRIPTIO", "ZONE"),
     ),
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 # Long Beach v6: Long Beach is in LA County, so the LA County Assessor parcel
@@ -242,7 +257,7 @@ _LB_LAYERS = JurisdictionLayers(
         provider="arcgis", source_type="gis_zoning", layer_name="LB Zoning/0",
         zone_code_fields=("ZONING_SYMBOL",), zone_name_fields=("ZONING_SYMBOL",),
     ),
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 # Irvine v7: City of Irvine OnlineParcel services; zoning uses master-plan /
@@ -263,7 +278,7 @@ _IRV_LAYERS = JurisdictionLayers(
         zone_code_fields=("ZONING",), zone_name_fields=("DESCRIPTION", "ZONING"),
         timeout_s=20.0,
     ),
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 # Oakland v8: City of Oakland ArcGIS Online org (Esri cloud, Render-reachable),
@@ -282,7 +297,7 @@ _OAK_LAYERS = JurisdictionLayers(
         provider="arcgis", source_type="gis_zoning", layer_name="Zoning_Group_Layers_/0",
         zone_code_fields=("BASEZONE",), zone_name_fields=("BASEZONE",),
     ),
-    overlays=(FLOOD_LAYER,),
+    overlays=(FLOOD_LAYER, FIRE_LAYER),
 )
 
 JURISDICTION_LAYERS: dict[str, JurisdictionLayers] = {
