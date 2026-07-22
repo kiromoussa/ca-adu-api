@@ -170,12 +170,11 @@ def test_hydrate_point_fetches_all_layers_in_parallel_and_caches():
     r = OnDemandResolver(db, enabled=True, fetch=fetch)
     out = r.hydrate_point("00000000-0000-0000-0000-0000000000aa", LA_POINT)
 
-    # All configured layers were queried: parcel, zoning, FEMA flood, CAL FIRE.
-    assert len(fetch.calls) == 4
+    # All configured layers were queried: parcel, zoning, FEMA flood.
+    assert len(fetch.calls) == 3
     assert any("LACounty_Parcel" in u for u in fetch.calls)
     assert any("zma/zimas" in u for u in fetch.calls)
     assert any("NFHL" in u for u in fetch.calls)
-    assert any("FHSZ" in u for u in fetch.calls)
 
     # One row cached per layer.
     assert out["parcel"] == 1 and out["zoning"] == 1 and out["flood"] == 1
@@ -201,7 +200,7 @@ def test_memo_prevents_refetch_within_ttl():
     r.hydrate_point("jid-1", LA_POINT)
     # Second call for the same point should be memoized (no new fetches).
     r.hydrate_point("jid-1", LA_POINT)
-    assert len(fetch.calls) == 4
+    assert len(fetch.calls) == 3
     # The zoning safety net is also memoized after hydrate_point.
     assert r.hydrate_zoning("jid-1", LA_POINT) == 0
 
